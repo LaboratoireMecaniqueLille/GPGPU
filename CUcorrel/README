@@ -1,0 +1,7 @@
+Programme pour la corrélation sur GPU
+
+Utilise CUDA version 5 ou supérieures (testé uniquement sur CUDA 7.5)
+
+Applique une résolution itérative pour chercher les paramètres minimisant les différences une image fixe et une image déformée selon des champs définis dans le programme. Cette version possède 7 paramètres: 3 pour les mouvements de corps solide, 2 pour les déformations uniformes et 2 de cisaillement.
+
+Cette version utilise la résolution par la descente au gradient et n'est pas encore fonctionnelle. La prochaine version contiendra une résolution plus directe: Gauss-Newton
