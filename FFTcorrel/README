@@ -1,0 +1,5 @@
+Ce programme a pour objectif de tester la corrélation par transformée de Fourier 2D à l'aide de cuFFT.
+
+Il crée une image de bruit, la découpe en tuiles et les décale dans une seconde image. 
+
+Il va ensuite calculer F-1(F(im1).*conj(F(im2))). On peut montrer que le maximum de cette matrice correspond au déplacement de im2 par rapport à im1. On vérifie ce résultat à la fin du programme pour chaque tuile.
