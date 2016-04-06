@@ -12,7 +12,6 @@ folder = "img_calib"
 prefix_img = "calib_"
 suffix_img = ".ptm"
 
-
 #----------- Lecture des images------------
 img = []
 for i in y:   # On importe toutes les images d'un coup dans un tableau img(n,pix)
@@ -22,7 +21,6 @@ for i in y:   # On importe toutes les images d'un coup dans un tableau img(n,pix
 del(tmp)
 img = np.array(img,np.float64)/16384. # On normalise pour avoir des valeurs entre 0 et 1
 print "Importation réussie de",M,"images de",img.shape[1],"pixels."
-
 
 #----------- Découpe en blocs --------------
 chunkSize = 102400 # Idéalement, faire des multiples de 1024 les plus grands possibles
@@ -45,8 +43,6 @@ for im in tab_img: # On parcourt les blocs
   cfit.compute() # On résout
   cfit.check() # Utile seulement pour vérifier que le calcul s'est bien passé (prend du temps!)
   x.extend(cfit.X) # On récupère les valeurs
-
-
 
 print len(x)/N,"==",img.shape[1],": On a bien récupéré tous les coefficients" if len(x) == N*img.shape[1] else "Problème !"
 print x[:3*len(y)] # On affiche les premières valeurs

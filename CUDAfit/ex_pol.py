@@ -4,7 +4,6 @@ from Cudafit import cgls
 import numpy as np
 
 
-
 class Pol(): # Pour représenter simlpement un polynôme
   def __init__(self,coeffs):
     self.coeffs = coeffs
@@ -19,8 +18,6 @@ class Pol(): # Pour représenter simlpement un polynôme
       d = "" if i==0 else " + "
       s+=d+str(self.coeffs[i])+"*x^"+str(i)
     return s
-
-
 
 # -------------- Préparation ---------------
 nb = 102400 # Nombre de systèmes à résoudres 
@@ -40,16 +37,9 @@ for i in range(nb):
 data = np.array(data).T # Les données sont contenues dans un np.array de dimension (M,nb)
 print data.shape
 
-
-
-
 # --------------- Résolution ---------------
 cfit = cgls.Fit(y=y,data=data,deg=N-1) # On crée un solveur en donnant les nb systèmes (on ne passe qu'un seul membre de droite: il est identique pour tous les systèmes)
 cfit.compute() # On exécute le calcul. Le résultat est dans cfit.X (un tableau avec les nb vecteurs solutions à la suite)
-
-
-
-
 
 # --------------- Vérification -------------
 cfit.check(0.01) # Petite fonction qui calcule les polynomes et vérifie si ils collent aux données. Ce test peut être lancé une seule fois sur des données de test mais ne pas l'utiliser en fonctionnement normal: il est BEAUCOUP plus lent que le calcul lui même
@@ -67,4 +57,3 @@ for i in range(3):
   plt.plot(data[:,pick],[p(data[j,pick]) for j in range(M)]) # Le polynome aux abcisses bruitées
   plt.scatter(data[:,pick],y,marker="x") # la fonction que l'on cherche à interpoler
   plt.show()
-
