@@ -1,4 +1,5 @@
 Petit script python pour convertir une image en un ficher csv, beaucoup plus simple à lire...
+Nécessite OpenCV2
 
 Non, ce n'est pas propre et oui ce n'est que temporaire.
 
