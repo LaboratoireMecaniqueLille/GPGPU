@@ -1,0 +1,5 @@
+Une classe permettant d'utiliser IRcal en python avec pyCUDA
+
+En plus des commentaires d'aide pour l'utilisation, il y a 3 fichiers d'exemple pour détailler l'appel à la classe cgls.Fit
+
+Voir le README de IRcal pour comprendre l'objectif
