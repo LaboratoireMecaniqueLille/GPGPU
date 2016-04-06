@@ -5,8 +5,8 @@ Il nécessite CUDA version 5 ou supérieure, n'a été testé qu'avec CUDA 7.5. 
 Le programme nécessite en entrée les valeurs des DL des pixels à différentes températures dans un fichier csv.
 Il contient sur chaque lignes les valeurs d'un pixel aux différentes températures pour la calibration.
 Il y a donc autant de lignes que de pixel dans l'image.
-Il calcule ensuite les coefficients d'un polynôme du degré choisi (inférieur au nombre d'images de calibration)
-Les données sont contenues dans le tableau data[] à la fin du programme, il ne reste qu'à l'écrire dans un fichier selon le format choisi
+Il calcule ensuite les coefficients d'un polynôme du degré choisi (inférieur au nombre d'images de calibration) qui interpole les points des différentes images pour chaque pixel
+Les coefficients sont contenus à la suite pour chaque pixel dans le tableau data[] à la fin du programme, il ne reste qu'à l'écrire dans un fichier selon le format choisi
 
 Valeurs à modifier: 
   cgls.cu:
