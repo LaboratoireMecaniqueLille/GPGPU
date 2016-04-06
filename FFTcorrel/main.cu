@@ -6,7 +6,7 @@
 #include <sys/time.h>
 
 #define IMG_X 2048
-#define TILE_X 16
+#define TILE_X 128
 #define GRID_X (IMG_X / TILE_X)
 
 using namespace std;
