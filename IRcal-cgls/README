@@ -1,0 +1,24 @@
+Ce programme a pour objectif la calibration d'une caméra infrarouge.
+
+Il nécessite CUDA version 5 ou supérieure, n'a été testé qu'avec CUDA 7.5. Il n'utilise pas de libraires de CUDA toolkit, les fonctions nécessaires ont été réécrites pour optimiser la vitesse d'exécution.
+
+Le programme nécessite en entrée les valeurs des DL des pixels à différentes températures dans un fichier csv.
+Il contient sur chaque lignes les valeurs d'un pixel aux différentes températures pour la calibration.
+Il y a donc autant de lignes que de pixel dans l'image.
+Il calcule ensuite les coefficients d'un polynôme du degré choisi (inférieur au nombre d'images de calibration)
+Les données sont contenues dans le tableau data[] à la fin du programme, il ne reste qu'à l'écrire dans un fichier selon le format choisi
+
+Valeurs à modifier: 
+  cgls.cu:
+    - NOM_FICHIER: le nom du fichier d'entrée
+    - N: Le degré du polynome d'interpolation + 1
+    - M: Le nombre d'images de calibration
+    - Y[M]: Les températures de la calibration (ligne 52)
+    - nb_lines: Le nombre de lignes dans le fichier (le nombre de pixels sur l'image)
+    Pour vérifier, décommenter la partie de debug à la fin: cela affiche les valeurs calculées puis effectue une boucle pour vérifier que l'interpolation est correcte
+  util.cu:
+    - ligne 19 dans getValues : La valeur de normalisation (la valeur max du DL)
+
+Il faut noter que le programme utilise environ 8*[(N+7)*N+M] octets de mémoire graphique (soit environ 256 Mo pour 20 images 640x512 et un polynôme de degré 5)
+
+
