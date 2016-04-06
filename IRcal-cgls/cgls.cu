@@ -16,7 +16,6 @@ using namespace std;
 int main(int argc, char** argv)
 {
   int N = 6, M = 14;
-  //int Tmin = 17;
   int nb_lines = 640*512;
   struct timeval t1,t2;
   string line;
@@ -27,10 +26,8 @@ int main(int argc, char** argv)
   gettimeofday(&t1,NULL);
   file.open(NOM_FICHIER);
   if(!file.is_open()){exit(-1);}
-  /*nb_lines = count(istreambuf_iterator<char>(file),istreambuf_iterator<char>(), '\n');
   file.seekg(0,ios::beg);*/
   gettimeofday(&t2,NULL);
-  //cout << " Ok: " << nb_lines << " lignes trouvées (" << timeDiff(t1,t2) << " ms)." << endl;
   cout << " Ok (" << timeDiff(t1,t2) << " ms)." << endl;
   
   cout << "Allocation et remlpissage du tableau..." << flush;
@@ -58,15 +55,6 @@ int main(int argc, char** argv)
   cudaMemcpy(devY,Y,M*sizeof(double),cudaMemcpyHostToDevice);
 
   double *A = (double*)malloc(nb_lines*N*N*sizeof(double));
-  /*for(int i =0; i < nb_lines; i++)
-  {
-    genMat(A+i*N*N,data+i*M,M,N);
-  }*/
-  //double *B = (double*)malloc(nb_lines*N*sizeof(double));
-  /*for(int i =0; i < nb_lines; i++)
-  {
-    genVect(B+i*N,data+i*M,Y,M,N);
-  }*/
   
   gettimeofday(&t2,NULL);
   cout << " Ok (" << timeDiff(t1,t2) << " ms)." << endl;
@@ -113,8 +101,6 @@ int main(int argc, char** argv)
   cudaMalloc(&devO, nb_lines*N*sizeof(double));
   cudaMalloc(&devX, nb_lines*N*sizeof(double));
 
-  //cudaMemcpy(devA,A,nb_lines*N*N*sizeof(double),cudaMemcpyHostToDevice);
-  //cudaMemcpy(devB,B,nb_lines*N*sizeof(double),cudaMemcpyHostToDevice);
   cudaMemset(devX,0,nb_lines*N*sizeof(double));
 
   double *devR, *devP, *devF, *devAp, *devAlpha, *devBuff; 
@@ -163,19 +149,22 @@ int main(int argc, char** argv)
   cudaMemcpy(X,devX,N*nb_lines*sizeof(double),cudaMemcpyDeviceToHost);
   gettimeofday(&t2,NULL);
   cout << " Ok (" << timeDiff(t1,t2) << "ms)."  << endl;
-  //printVec(X,3*N);
-  //printVec(X+N*nb_lines/2,3*N);
+
+  // Pour la debug: 
+
+  /*printVec(X,3*N);
+  printVec(X+N*nb_lines/2,3*N);
 
 
 
-  /*for(int i = nb_lines/2 - 10; i < nb_lines/2; i++) // Verif partielle
+  for(int i = nb_lines/2 - 10; i < nb_lines/2; i++) // Verif partielle
   {
     cout << "Pixel " << i / 512 << ", " << i % 512 << ":" << endl;
     for(int j = 0; j < M; j++)
     {
       cout << Y[j] << ", " << pol(data[i*M+j],X+i*N,N) << " (" << abs(Y[j] - pol(data[i*M+j],X+i*N,N))  << ")" << endl;
     }
-  }*/
+  }
 
   cout << "Vérification..." << endl;
   int err = 0, loop = 0;   //Verif complète
@@ -193,7 +182,7 @@ int main(int argc, char** argv)
       }
     }
   }
-  cout << "Erreurs: " << err << "/" << nb_lines << "(" << 100.*err/nb_lines << "% des pixels)." << endl;
+  cout << "Erreurs: " << err << "/" << nb_lines << "(" << 100.*err/nb_lines << "% des pixels)." << endl;*/
 
 
 
