@@ -1,0 +1,12 @@
+__global__ void myDot(double*,double*,double*, int, int);
+__global__ void vecSum(double*, double*);
+__global__ void vecDiff(double*, double*);
+__global__ void norm2(double*, double*, int);
+__global__ void vecMul(double*, double*, double*, int);
+__global__ void ewDiv(double*, double*, double* = NULL);
+__global__ void scalMul(double*, double*, int, double* = NULL);
+__global__ void vecCpy(double*, double*);
+__global__ void powArray(double*, double*, int, int);
+__global__ void sumCol(double*, double*, int);
+__global__ void HankelFill(double*, double*, int);
+__global__ void ewMul(double*, double*, int);
