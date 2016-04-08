@@ -157,7 +157,7 @@ __global__ void gdSum(float* out, float* G, float* orig, float* def)
   //out[id] = 1;
 }
 
-void gradientDescent(float* devG, float* devOut, float* devDef, float* vect)
+void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect)
 {
   float *devTemp;
   cudaMalloc(&devTemp,WIDTH*HEIGHT*sizeof(float));
@@ -171,7 +171,7 @@ void gradientDescent(float* devG, float* devOut, float* devDef, float* vect)
       reduce<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
       size = (size+BLOCKSIZE-1)/BLOCKSIZE;
     }
-    cudaMemcpy(vect+p,devTemp,sizeof(float),cudaMemcpyDeviceToHost);
+    cudaMemcpy(devVect+p,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
   }
-  cudaFree(devTemp);
+  cudafree(devTemp);
 }
