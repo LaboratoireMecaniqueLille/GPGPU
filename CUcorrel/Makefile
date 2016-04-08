@@ -1,1 +1,1 @@
-all:;nvcc -o CUcorrel *.cu
+all:;nvcc -lcusolver -o CUcorrel *.cu
