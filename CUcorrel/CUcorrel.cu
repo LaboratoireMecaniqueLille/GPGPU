@@ -29,7 +29,10 @@ int main(int argc, char** argv)
     //orig[i] = (float)rand()/RAND_MAX;
   }
   //float step = .001;
-  //float vecStep[PARAMETERS] = {0.1,0.1,0.1,1,1,1,1};
+  float vecStep[PARAMETERS] = {1,1,.001,1,1,.001,.001};
+  float *devVecStep;
+  cudaMalloc(&devVecStep,PARAMETERS*sizeof(float));
+  cudaMemcpy(devVecStep,vecStep,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   readFile(iAddr,orig,256);
   cout << "Image d'origine" << endl;
@@ -176,6 +179,7 @@ int main(int argc, char** argv)
     cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
 
     gettimeofday(&t1,NULL);
+    //gradientDescent(devG, devOut, devDef, devVec);//--
     gradientDescent(devG, devOut, devDef, devVec);//--
     gettimeofday(&t2,NULL);
     cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
@@ -186,6 +190,7 @@ int main(int argc, char** argv)
     
     gettimeofday(&t1,NULL);
     myDot<<<1,PARAMETERS,PARAMETERS*sizeof(float)>>>(devInv,devVec,devVec);//--
+    ewMul<<<1,PARAMETERS>>>(devVec,devVecStep);
     addVec<<<1,PARAMETERS>>>(devParam,devVec);
     cudaDeviceSynchronize();
     gettimeofday(&t2,NULL);
