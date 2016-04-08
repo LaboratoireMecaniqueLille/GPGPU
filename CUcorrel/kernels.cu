@@ -176,34 +176,16 @@ void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect)
   cudafree(devTemp);
 }
 
-__global__ void myDot(double* A, double* b, double* out, int w, int h)
+__global__ void myDot(double* A, double* b, double* out)
 {
-  /*
-  Pour réaliser des produits matrice-vecteur de "petites" (N*M< 1024) matrices le plus efficacement possible <<<dimGrid,dimBlock>>>: Dimblock de type Dim3 (x,y) où x=h est la dimension du vecteur de sortie et y le nombre de matrice par bloc (x*y < 1024)
-  dimGrid: nombre de blocs
-  Ex:
-   On appelle le kernel avec <<<n,(h,k), k*w*sizeof(double)>>>(A,b,o,w,h): 
-   A est de dimension n*k*w*h( n*k matrices de taille w*h, en donnant les lignes successives)
-   b est de dimension n*k*w ( n*k vecteurs de longueur w)
-   o est de longueur n*k*h ( contiendra les n*k vecteurs de taille h)
-
-   Réalise n*k produits matrice-vecteur avec n*k matrices de taille w*h et autant de vecteurs de longueur w
-
-  ATTENTION: il faut que h >= w !!!
-  TODO: Pour se passer de cette limitation, il faut répartir la tâche de copie entre les threads
-  (boucle de longueur w/h pour attribuer la valeur de sh_b à la place de if(x<w))
-  */
   int x = threadIdx.x; //Composante du vecteur (ou ligne de la matrice)
-  int y = threadIdx.y; //Numéro du couple matrice-vecteur du bloc
-  int offset = blockIdx.x*blockDim.y+y; //Décalage du au bloc et au numéro du vecteur
   double val = 0;
-  extern __shared__ double sh_b[]; // La mémoire partagées contenant les vecteurs du bloc
-  if(x < w)  // On les copie si on est dans le vecteur: c'est pour ça qu'il faut que h>=w
-  {sh_b[w*y+x] = b[w*offset+x];} // On les place dans la mémoire partagées DU BLOC
+  extern __shared__ double sh_b[]; // Les mémoires partagées contenant les vecteurs du bloc
+  sh_b[x] = b[x]; // On les place dans la mémoire partagées DU BLOC
   __syncthreads(); // Primordial: évite les "race condition": qu'un thread accède aux données avant qu'elles soient écrites
-  for(int i = 0; i < w; i++)
+  for(int i = 0; i < PARAMETERS; i++)
   {
-    val += A[h*w*offset+x*w+i]*sh_b[w*y+i]; // On somme les produits sur la ligne
+    val += A[x*w+i]*sh_b[i]; // On somme les produits sur la ligne
   }
-  out[h*offset+x] = val; // On écrit le résultat dans le vecteur sortie
+  out[x] = val; // On écrit le résultat dans le vecteur sortie
 }
