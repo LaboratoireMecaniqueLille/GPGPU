@@ -8,6 +8,7 @@ __global__ void makeMatrix(float*, float*);
 __global__ void gdSum(float*, float*, float*, float*);
 __global__ void myDot(float*, float*, float*);
 __global__ void addVec(float*, float*);
+__global__ void ewMul(float*,float*);
 float residuals(float*, float*, uint);
 void initCuda(float*);
 void cleanCuda();

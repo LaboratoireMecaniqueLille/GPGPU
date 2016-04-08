@@ -195,3 +195,10 @@ __global__ void addVec(float* A, float* B)
   int x = threadIdx.x;
   A[x] += B[x];
 }
+
+__global__ void ewMul(float* A, float* B)
+{
+  int x = threadIdx.x;
+  A[x] *= B[x];
+}
+
