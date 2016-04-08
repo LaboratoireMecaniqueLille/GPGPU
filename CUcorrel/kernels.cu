@@ -142,7 +142,7 @@ __global__ void makeMatrix(float* mat, float* G)
         val += G[x*WIDTH*HEIGHT+j*WIDTH+i]*G[y*WIDTH*HEIGHT+j*WIDTH+i];
       }
     }
-    mat[x+y*PARAMETERS] = val;
+    mat[x+y*PARAMETERS] = val/WIDTH/HEIGHT;
     __syncthreads();
   }
 }
