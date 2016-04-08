@@ -78,4 +78,5 @@ void writeFields(float2* devFields)
   }
   //printMat2D(field,WIDTH,HEIGHT,256);
   cudaMemcpy(devFields+6*WIDTH*HEIGHT,field,taille2,cudaMemcpyHostToDevice);
+  free(field);
 }

@@ -116,7 +116,7 @@ __global__ void makeG(float* G, float2* U, float* gradX, float* gradY)
   }
 
 }
-/*
+
 __global__ void makeMatrix(float* mat, float* G)
 {
   uint x = threadIdx.x;
@@ -132,7 +132,7 @@ __global__ void makeMatrix(float* mat, float* G)
     for(int i = 0;i < PARAMETERS; i++)
     {
       l_f[i] = f[i];
-    }//*
+    }*/
     float val = 0;
     for(uint i = 0; i < WIDTH; i++)
     {
@@ -146,7 +146,7 @@ __global__ void makeMatrix(float* mat, float* G)
     __syncthreads();
   }
 }
-*/
+
 __global__ void gdSum(float* out, float* G, float* orig, float* def)
 {
   uint id = blockIdx.x*blockDim.x+threadIdx.x;

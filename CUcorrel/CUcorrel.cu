@@ -18,7 +18,7 @@ int main(int argc, char** argv)
   struct timeval t1, t2;
   size_t taille = WIDTH*HEIGHT*sizeof(float);
   size_t taille2 = WIDTH*HEIGHT*sizeof(float2);
-  int nbIter=20;
+  int nbIter=10;
   char iAddr[10] = "img.csv";
   char oAddr[10] = "out0.csv";
   srand(time(NULL));
@@ -28,7 +28,7 @@ int main(int argc, char** argv)
     orig[i] = (float)i/WIDTH/HEIGHT+(float)rand()/RAND_MAX/1000;
     //orig[i] = (float)rand()/RAND_MAX;
   }
-  float step = 1;
+  float step = .001;
   float vecStep[PARAMETERS] = {0.1,0.1,0.1,1,1,1,1};
 
   readFile(iAddr,orig,256);
@@ -96,8 +96,9 @@ int main(int argc, char** argv)
   exit(0);*/
   
 
-/* -- Code pour générer la Hessienne, plus utilisé ---
+// -- Code pour générer la Hessienne ---
 
+  float* devMatrix;
   cudaMalloc(&devMatrix,PARAMETERS*PARAMETERS*sizeof(float));
   dim3 tailleMat(PARAMETERS,PARAMETERS);
   gettimeofday(&t1,NULL);
@@ -111,11 +112,12 @@ int main(int argc, char** argv)
   cudaMemcpy(test,devMatrix,PARAMETERS*PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
   cout << "\nMatrice:" << endl;
   printMat(test,PARAMETERS,PARAMETERS);
-*/
+
 
 
   //float param[7] = {2.81,-.86,1.36,.145,4.037,.0036,-4.97};
-  float param[7] = {0,0,0,.145,4.037,.0036,-4.97};
+  //float param[7] = {0,0,0,.145,4.037,.0036,-4.97};
+  float param[7] = {1,1,1,1,1,1,1};
   //float param[7] = {7.81,-3.86,6.36,3.145,4.037,.0036,-4.97};
   //float param[7] = {0,0,2,0,0,0,0};
   cout << "Paramètres réels: ";
@@ -170,7 +172,7 @@ int main(int argc, char** argv)
     printMat(vec,PARAMETERS,1);
     for(int i = 0;i < PARAMETERS; i++)
     {
-      param[i] -= step*vecStep[i]*vec[i];
+      param[i] += step*vecStep[i]*vec[i];
     }
     cudaMemcpy(devParam,param,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
     
@@ -179,9 +181,9 @@ int main(int argc, char** argv)
     oldres = res;
     res = residuals(devOut, devDef, HEIGHT*WIDTH)/HEIGHT/WIDTH;
     if(res <= oldres)
-    {step *= 1.2;}
+    {step *= 1.2;cout << "pas: " << step << endl;}
     else
-    {step *= -.1;cout << "Reduction du pas !" << endl;}
+    {step *= .1;cout << "Reduction du pas !\n" << "pas: " << step << endl;}
     //cudaDeviceSynchronize();
     gettimeofday(&t2, NULL);
     cout << "\nÉcart: "<< res << ", Calcul de l'écart: " << timeDiff(t1,t2) << "ms." << endl;
