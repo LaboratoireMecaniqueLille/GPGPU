@@ -26,7 +26,6 @@ int main(int argc, char** argv)
   gettimeofday(&t1,NULL);
   file.open(NOM_FICHIER);
   if(!file.is_open()){exit(-1);}
-  file.seekg(0,ios::beg);*/
   gettimeofday(&t2,NULL);
   cout << " Ok (" << timeDiff(t1,t2) << " ms)." << endl;
   
