@@ -200,10 +200,6 @@ int main(int argc, char** argv)
     cout << "Direction:" << endl;
     printMat(vec,PARAMETERS,1);
 
-  
-
-
-
     gettimeofday(&t1, NULL);
     oldres = res;//--
     res = residuals(devOut, devDef, HEIGHT*WIDTH)/HEIGHT/WIDTH;//--
