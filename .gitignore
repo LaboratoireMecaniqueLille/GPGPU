@@ -2,3 +2,4 @@ CUcorrel/CUcorrel
 IRcal-cgls/cgls
 FFTcorrel/main
 *.pyc
+*.csv
