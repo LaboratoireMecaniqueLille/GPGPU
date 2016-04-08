@@ -189,3 +189,9 @@ __global__ void myDot(float* A, float* b, float* out)
   }
   out[x] = val; // On écrit le résultat dans le vecteur sortie
 }
+
+__global__ void addVec(float* A, float* B)
+{
+  int x = threadIdx.x;
+  A[x] += B[x];
+}
