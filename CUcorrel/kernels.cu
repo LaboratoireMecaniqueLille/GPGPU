@@ -173,19 +173,19 @@ void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect)
     }
     cudaMemcpy(devVect+p,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
   }
-  cudafree(devTemp);
+  cudaFree(devTemp);
 }
 
-__global__ void myDot(double* A, double* b, double* out)
+__global__ void myDot(float* A, float* b, float* out)
 {
   int x = threadIdx.x; //Composante du vecteur (ou ligne de la matrice)
-  double val = 0;
-  extern __shared__ double sh_b[]; // Les mémoires partagées contenant les vecteurs du bloc
+  float val = 0;
+  extern __shared__ float sh_b[]; // Les mémoires partagées contenant les vecteurs du bloc
   sh_b[x] = b[x]; // On les place dans la mémoire partagées DU BLOC
   __syncthreads(); // Primordial: évite les "race condition": qu'un thread accède aux données avant qu'elles soient écrites
   for(int i = 0; i < PARAMETERS; i++)
   {
-    val += A[x*w+i]*sh_b[i]; // On somme les produits sur la ligne
+    val += A[x*PARAMETERS+i]*sh_b[i]; // On somme les produits sur la ligne
   }
   out[x] = val; // On écrit le résultat dans le vecteur sortie
 }

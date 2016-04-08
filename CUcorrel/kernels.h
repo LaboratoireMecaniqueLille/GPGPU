@@ -6,7 +6,7 @@ __global__ void makeG(float*, float2*, float*, float*);
 __global__ void makeMatrix(float*, float2*, float*, float*);
 __global__ void makeMatrix(float*, float*);
 __global__ void gdSum(float*, float*, float*, float*);
-__global__ void myDot(double*, double*, double*);
+__global__ void myDot(float*, float*, float*);
 float residuals(float*, float*, uint);
 void initCuda(float*);
 void cleanCuda();
