@@ -3,3 +3,6 @@ IRcal-cgls/cgls
 FFTcorrel/main
 *.pyc
 *.csv
+*.png
+*.bmp
+*.jpg
