@@ -40,7 +40,7 @@ void writeFields(float2* devFields)
   {
     for(int j = 0; j < HEIGHT; j++)
     {
-      field[i+WIDTH*j].x = (float)i/WIDTH; // Stretch X
+      field[i+WIDTH*j].x = 2.*i/WIDTH-1.; // Stretch X
       field[i+WIDTH*j].y = 0;
     }
   }
@@ -51,7 +51,7 @@ void writeFields(float2* devFields)
     for(int j = 0; j < HEIGHT; j++)
     {
       field[i+WIDTH*j].x = 0; // Stretch Y
-      field[i+WIDTH*j].y = (float)j/HEIGHT;
+      field[i+WIDTH*j].y = 2.*j/HEIGHT-1.;
     }
   }
   //printMat2D(field,WIDTH,HEIGHT,256);
@@ -61,7 +61,7 @@ void writeFields(float2* devFields)
   {
     for(int j = 0; j < HEIGHT; j++)
     {
-      field[i+WIDTH*j].x = (float)j/HEIGHT; // Shear X
+      field[i+WIDTH*j].x = 2.*j/HEIGHT-1.; // Shear X
       field[i+WIDTH*j].y = 0; 
     }
   }
@@ -73,7 +73,7 @@ void writeFields(float2* devFields)
     for(int j = 0; j < HEIGHT; j++)
     {
       field[i+WIDTH*j].x = 0; // Shear Y
-      field[i+WIDTH*j].y = (float)i/WIDTH;
+      field[i+WIDTH*j].y = 2.*i/WIDTH-1;
     }
   }
   //printMat2D(field,WIDTH,HEIGHT,256);
