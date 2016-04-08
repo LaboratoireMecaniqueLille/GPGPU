@@ -107,3 +107,65 @@ void writeFile(char* address, float* data, float norm)
   
 }
 
+void checkError(cusolverStatus_t cuSolverStatus)
+{
+  if(cuSolverStatus == CUSOLVER_STATUS_SUCCESS)
+  {return;}
+  else
+  {
+    cout << "/!\\ Cusolver error: ";
+    
+    switch(cuSolverStatus)
+    {
+      case CUSOLVER_STATUS_NOT_INITIALIZED:
+        cout << "CUSOLVER_STATUS_NOT_INITIALIZED";
+        break;
+      case CUSOLVER_STATUS_ALLOC_FAILED:
+        cout << "CUSOLVER_STATUS_ALLOC_FAILED";
+        break;
+      case CUSOLVER_STATUS_INVALID_VALUE:
+        cout << "CUSOLVER_STATUS_INVALID_VALUE";
+        break;
+      case CUSOLVER_STATUS_ARCH_MISMATCH:
+        cout << "CUSOLVER_STATUS_ARCH_MISMATCH";
+        break;
+      case CUSOLVER_STATUS_EXECUTION_FAILED:
+        cout << "CUSOLVER_STATUS_EXECUTION_FAILED";
+        break;
+      case CUSOLVER_STATUS_INTERNAL_ERROR:
+        cout << "CUSOLVER_STATUS_INTERNAL_ERROR";
+        break;
+      case CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED:
+        cout << "CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED";
+        break;
+      default:
+        cout << "Unknown error: " << cuSolverStatus;
+    }
+    cout << endl;
+
+  }
+}
+
+void invert(float* devA, float* devInv)
+{
+  cusolverDnHandle_t handle = NULL;
+  cusolverDnCreate(&handle);
+  //cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(double));// On suppose qu'il est déjà alloué...
+  float B[PARAMETERS*PARAMETERS] = {0};
+  for(int i = 0; i < PARAMETERS; i++)
+  {B[(PARAMETERS+1)*i] = 1;}
+  cudaMemcpy(devInv,B,PARAMETERS*PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
+  int bufferSize=0;
+  cusolverDnSgetrf_bufferSize(handle,PARAMETERS,PARAMETERS,devA,PARAMETERS,&bufferSize);
+  float* buffer;
+  cudaMalloc(&buffer,bufferSize*sizeof(float));
+  int* piv;
+  cudaMalloc(&piv,PARAMETERS*sizeof(float));
+  int *info;
+  cudaMalloc(&info,sizeof(int));
+  checkError(cusolverDnSgetrf(handle,PARAMETERS,PARAMETERS,devA,PARAMETERS,buffer,piv,info));
+  checkError(cusolverDnSgetrs(handle,CUBLAS_OP_N,PARAMETERS,PARAMETERS,devA,PARAMETERS,piv,devInv,PARAMETERS,info));
+  cudaFree(buffer);
+  cudaFree(piv);
+  cudaFree(info);
+}

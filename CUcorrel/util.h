@@ -6,3 +6,4 @@ void readParam(char**,float*, int=7);
 void getValues(std::string, double*, int);
 void readFile(char*, float*, float);
 void writeFile(char*, float*, float);
+void invert(float*,float*);
