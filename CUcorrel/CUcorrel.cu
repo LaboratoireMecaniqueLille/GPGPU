@@ -28,8 +28,8 @@ int main(int argc, char** argv)
     orig[i] = (float)i/WIDTH/HEIGHT+(float)rand()/RAND_MAX/1000;
     //orig[i] = (float)rand()/RAND_MAX;
   }
-  float step = .001;
-  float vecStep[PARAMETERS] = {0.1,0.1,0.1,1,1,1,1};
+  //float step = .001;
+  //float vecStep[PARAMETERS] = {0.1,0.1,0.1,1,1,1,1};
 
   readFile(iAddr,orig,256);
   cout << "Image d'origine" << endl;
@@ -114,10 +114,23 @@ int main(int argc, char** argv)
   printMat(test,PARAMETERS,PARAMETERS);
 
 
+  float* devInv;
+  cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(float));
+  gettimeofday(&t1,NULL);
+  invert(devMatrix,devInv);
+  gettimeofday(&t2,NULL);
+  cout << "Inversion de la matrice: " << timeDiff(t1,t2) << " ms." << endl;
 
-  //float param[7] = {2.81,-.86,1.36,.145,4.037,.0036,-4.97};
+  cudaMemcpy(test,devInv,PARAMETERS*PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
+  cout << "\nMatrice inversée:" << endl;
+  printMat(test,PARAMETERS,PARAMETERS);
+
+
+
+  float param[7] = {2.81,-.86,1.36,.145,4.037,.0036,-4.97};
   //float param[7] = {0,0,0,.145,4.037,.0036,-4.97};
-  float param[7] = {1,1,1,1,1,1,1};
+  //float param[7] = {1,1,1,1,1,1,1};
+  //float param[7] = {.5,.5,.5,.5,.5,.5,.5};
   //float param[7] = {7.81,-3.86,6.36,3.145,4.037,.0036,-4.97};
   //float param[7] = {0,0,2,0,0,0,0};
   cout << "Paramètres réels: ";
@@ -151,42 +164,47 @@ int main(int argc, char** argv)
   for(int i = 0;i < nbIter; i++)
   {
     cout << "Boucle n°" << i+1 << endl;
+    cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
     cout << "Paramètres calculés: ";
     for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
     cout << endl;
 
     gettimeofday(&t1,NULL);
-    deform2D<<<gridsize,blocksize>>>(devOut, devFields, devParam);
+    deform2D<<<gridsize,blocksize>>>(devOut, devFields, devParam);//--
     cudaDeviceSynchronize();
     gettimeofday(&t2, NULL);
     cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
-    //cudaMemcpy(orig,devOut,taille,cudaMemcpyDeviceToHost);
-    //cout << "Image modifiée:" << endl;
-    //printMat(orig,WIDTH,HEIGHT,256);
 
     gettimeofday(&t1,NULL);
-    gradientDescent(devG, devOut, devDef, vec);
+    gradientDescent(devG, devOut, devDef, devVec);//--
     gettimeofday(&t2,NULL);
     cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
-    cout << "Valeurs:" << endl;
+
+    cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
+    cout << "Gradient des paramètres:" << endl;
     printMat(vec,PARAMETERS,1);
-    for(int i = 0;i < PARAMETERS; i++)
-    {
-      param[i] += step*vecStep[i]*vec[i];
-    }
-    cudaMemcpy(devParam,param,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
     
+    gettimeofday(&t1,NULL);
+    myDot<<<1,PARAMETERS,PARAMETERS*sizeof(float)>>>(devInv,devVec,devVec);//--
+    addVec<<<1,PARAMETERS>>>(devParam,devVec);
+    cudaDeviceSynchronize();
+    gettimeofday(&t2,NULL);
+    cout << "Mise à jour des valeurs: " << timeDiff(t1,t2) << " ms." << endl;
+
+    cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
+    cout << "Direction:" << endl;
+    printMat(vec,PARAMETERS,1);
+
+  
+
+
 
     gettimeofday(&t1, NULL);
-    oldres = res;
-    res = residuals(devOut, devDef, HEIGHT*WIDTH)/HEIGHT/WIDTH;
-    if(res <= oldres)
-    {step *= 1.2;cout << "pas: " << step << endl;}
-    else
-    {step *= .1;cout << "Reduction du pas !\n" << "pas: " << step << endl;}
-    //cudaDeviceSynchronize();
+    oldres = res;//--
+    res = residuals(devOut, devDef, HEIGHT*WIDTH)/HEIGHT/WIDTH;//--
     gettimeofday(&t2, NULL);
     cout << "\nÉcart: "<< res << ", Calcul de l'écart: " << timeDiff(t1,t2) << "ms." << endl;
+
   }
   int err = 0;
   err = cudaGetLastError();
@@ -194,6 +212,7 @@ int main(int argc, char** argv)
   cout << err << endl;
   cleanCuda();
   cudaFree(devOut);
+  cudaFree(devMatrix);
   cudaFree(devG);
   cudaFree(devOrig);
   cudaFree(devDef);
