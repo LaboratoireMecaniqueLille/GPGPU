@@ -1,3 +1,4 @@
+#include <string>
 void printMat(float*,uint,uint, uint=1);
 void printMat2D(float2*,uint,uint, uint=1);
 double timeDiff(struct timeval, struct timeval);
