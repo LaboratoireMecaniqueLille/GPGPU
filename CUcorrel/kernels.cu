@@ -163,7 +163,7 @@ void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect)
   cudaMalloc(&devTemp,WIDTH*HEIGHT*sizeof(float));
   for(uint p = 0; p < PARAMETERS; p++)
   {
-  gdSum<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devTemp, devG+p, devOut, devDef);
+  gdSum<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devTemp, devG+p*HEIGHT*WIDTH, devOut, devDef);
   uint size;
     size = WIDTH*HEIGHT;
     while(size>1)
