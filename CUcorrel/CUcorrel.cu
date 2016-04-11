@@ -18,7 +18,7 @@ int main(int argc, char** argv)
   struct timeval t1, t2;
   size_t taille = WIDTH*HEIGHT*sizeof(float);
   size_t taille2 = WIDTH*HEIGHT*sizeof(float2);
-  int nbIter=10;
+  int nbIter=20;
   char iAddr[10] = "img.csv";
   char oAddr[10] = "out0.csv";
   srand(time(NULL));
@@ -132,7 +132,7 @@ int main(int argc, char** argv)
 
 
 
-  float param[PARAMETERS] = {-.2,-8.318,3.22,-1.145,1.37,2.3,0};
+  float param[PARAMETERS] = {-.2,-4.318,3.22,-1.145,1.37,2.3,0};
   //float param[7] = {1,1,1,1,1,1,1};
   cout << "Paramètres réels: ";
   for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
@@ -143,12 +143,18 @@ int main(int argc, char** argv)
   
 
   deform2D<<<gridsize,blocksize>>>(devDef,devFields,devParam); //Calcule l'image à recaler
-  
+  for(int i = 0; i < WIDTH*HEIGHT ; i++)
+  { 
+    orig[i] = (float)rand()/RAND_MAX*4-2;
+  }
+  cudaMalloc(&devOut,taille);
+  cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice);// Pour ajouter le bruit
+  addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef,devOut);
+
   cudaMemcpy(orig,devDef,taille,cudaMemcpyDeviceToHost); // Pour récupérer l'image
   writeFile(oAddr, orig, 1);                             //
 
   
-  cudaMalloc(&devOut,taille);
 
     //param[0] = 2.7;param[1] = -0.86;param[2] = 1.6;param[3] = .345;param[4] = 3.7;param[5] = .06;param[6] = -3.97;
     for(int i = 0; i < PARAMETERS; i++)
@@ -205,10 +211,12 @@ int main(int argc, char** argv)
     cout << "\nÉcart: "<< res << ", Calcul de l'écart: " << timeDiff(t1,t2) << "ms." << endl;
 
   }
-  int err = 0;
+  cudaError_t err;
   err = cudaGetLastError();
   cout << "Cuda status: " << ((err == 0)?"OK.":"ERREUR !!") << endl;
   cout << err << endl;
+  if(err != 0)
+  {cout << cudaGetErrorName(err) << endl;}
   cleanCuda();
   cudaFree(devOut);
   cudaFree(devMatrix);
