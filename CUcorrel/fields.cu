@@ -1,5 +1,7 @@
 #include "CUcorrel.h"
 
+//7 champs: 3 mvt de corps solide, 2 déformations uniformes et 2 cisaillements
+
 void writeFields(float2* devFields)
 {
   //Assignation des champs
@@ -26,6 +28,7 @@ void writeFields(float2* devFields)
   }
   //printMat2D(field,WIDTH,HEIGHT,256);
   cudaMemcpy(devFields+WIDTH*HEIGHT,field,taille2,cudaMemcpyHostToDevice);
+
   for(int i = 0; i < WIDTH; i++)
   {
     for(int j = 0; j < HEIGHT; j++)
