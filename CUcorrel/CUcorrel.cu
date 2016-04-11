@@ -23,13 +23,15 @@ int main(int argc, char** argv)
   char oAddr[10] = "out0.csv";
   srand(time(NULL));
   float *orig = (float*)malloc(taille);
-  for(int i = 0; i < HEIGHT*WIDTH; i++)
+  /*for(int i = 0; i < HEIGHT*WIDTH; i++)
   {
-    orig[i] = (float)i/WIDTH/HEIGHT+(float)rand()/RAND_MAX/1000;
+    orig[i] = (float)i/WIDTH/HEIGHT+(float)rand()/RAND_MAX/100;
     //orig[i] = (float)rand()/RAND_MAX;
-  }
+  }*/
   //float step = .001;
-  float vecStep[PARAMETERS] = {1,1,.001,1,1,.001,.001};
+  float vecStep[PARAMETERS] = {1,1,1,1,1,1,1};
+  //float vecStep[PARAMETERS] = {2,2,2,2,2,2,2};
+  //float vecStep[PARAMETERS] = {.1,.1,.1,.1,.1,.1};
   float *devVecStep;
   cudaMalloc(&devVecStep,PARAMETERS*sizeof(float));
   cudaMemcpy(devVecStep,vecStep,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
@@ -130,12 +132,8 @@ int main(int argc, char** argv)
 
 
 
-  float param[7] = {2.81,-.86,1.36,.145,4.037,.0036,-4.97};
-  //float param[7] = {0,0,0,.145,4.037,.0036,-4.97};
+  float param[PARAMETERS] = {-.2,-8.318,3.22,-1.145,1.37,2.3,0};
   //float param[7] = {1,1,1,1,1,1,1};
-  //float param[7] = {.5,.5,.5,.5,.5,.5,.5};
-  //float param[7] = {7.81,-3.86,6.36,3.145,4.037,.0036,-4.97};
-  //float param[7] = {0,0,2,0,0,0,0};
   cout << "Paramètres réels: ";
   for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
   cout << endl;
@@ -153,7 +151,8 @@ int main(int argc, char** argv)
   cudaMalloc(&devOut,taille);
 
     //param[0] = 2.7;param[1] = -0.86;param[2] = 1.6;param[3] = .345;param[4] = 3.7;param[5] = .06;param[6] = -3.97;
-  param[0] = 0;param[1] = 0;param[2] = 0;param[3] = 0;param[4] = 0;param[5] = 0;param[6] = 0;
+    for(int i = 0; i < PARAMETERS; i++)
+    {param[i] = 0;}
   //readParam(argv,param); // Pour tester des valeurs sans recompiler
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
@@ -179,7 +178,6 @@ int main(int argc, char** argv)
     cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
 
     gettimeofday(&t1,NULL);
-    //gradientDescent(devG, devOut, devDef, devVec);//--
     gradientDescent(devG, devOut, devDef, devVec);//--
     gettimeofday(&t2,NULL);
     cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
@@ -190,8 +188,8 @@ int main(int argc, char** argv)
     
     gettimeofday(&t1,NULL);
     myDot<<<1,PARAMETERS,PARAMETERS*sizeof(float)>>>(devInv,devVec,devVec);//--
-    ewMul<<<1,PARAMETERS>>>(devVec,devVecStep);
-    addVec<<<1,PARAMETERS>>>(devParam,devVec);
+    ewMul<<<1,PARAMETERS>>>(devVec,devVecStep);//--
+    addVec<<<1,PARAMETERS>>>(devParam,devVec);//--
     cudaDeviceSynchronize();
     gettimeofday(&t2,NULL);
     cout << "Mise à jour des valeurs: " << timeDiff(t1,t2) << " ms." << endl;
