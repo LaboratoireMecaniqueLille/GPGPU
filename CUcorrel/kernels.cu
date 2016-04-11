@@ -192,7 +192,7 @@ __global__ void myDot(float* A, float* b, float* out)
 
 __global__ void addVec(float* A, float* B)
 {
-  int x = threadIdx.x;
+  int x = blockIdx.x*blockDim.x+threadIdx.x;
   A[x] += B[x];
 }
 
