@@ -7,3 +7,5 @@ FFTcorrel/main
 *.bmp
 *.jpg
 *.swp
+*~
+*_
