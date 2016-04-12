@@ -2,7 +2,7 @@
 #include <fstream> //f.open
 #include <stdlib.h> //atof
 #include <cusolverDn.h> // Pour invert
-#include "kernels.h"//reduce
+#include "kernels.cuh"//reduce
 #include "CUcorrel.h"//BLOCKSIZE
 
 using namespace std;
