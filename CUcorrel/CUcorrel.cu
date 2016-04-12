@@ -29,8 +29,8 @@ int main(int argc, char** argv)
     //orig[i] = (float)rand()/RAND_MAX;
   }*/
   //float step = .001;
-  float vecStep[PARAMETERS] = {1,1,1,1,1,1,1};
-  //float vecStep[PARAMETERS] = {2,2,2,2,2,2,2};
+  //float vecStep[PARAMETERS] = {1,1,1,1,1,1,1};
+  float vecStep[PARAMETERS] = {2,2,2,2,2,2,2};
   //float vecStep[PARAMETERS] = {.1,.1,.1,.1,.1,.1};
   float *devVecStep;
   cudaMalloc(&devVecStep,PARAMETERS*sizeof(float));
