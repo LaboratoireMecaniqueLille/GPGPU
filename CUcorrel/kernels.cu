@@ -3,7 +3,7 @@
 
 texture<float, cudaTextureType2D, cudaReadModeElementType> tex;
 cudaArray* cuArray;
-float *devSq;
+float *devTemp;
 
 using namespace std;
 
@@ -73,20 +73,20 @@ TODO: Optimiser le kernel de réduction pour sommer tous les éléments !
 voir le lien ci dessous:
 http://docs.nvidia.com/cuda/samples/6_Advanced/reduction/doc/reduction.pdf
 */
-  lsq<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devSq, devData1, devData2, HEIGHT*WIDTH);
+  lsq<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devTemp, devData1, devData2, HEIGHT*WIDTH);
   while(size>1)
   {
-    reduce<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devSq,size);
+    reduce<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
     size = (size+BLOCKSIZE-1)/BLOCKSIZE;
   }
   float out;
-  cudaMemcpy(&out,devSq,sizeof(float),cudaMemcpyDeviceToHost);
+  cudaMemcpy(&out,devTemp,sizeof(float),cudaMemcpyDeviceToHost);
   return out;
 }
 
 void initCuda(float* data)
 {
-  cudaMalloc(&devSq,HEIGHT*WIDTH*sizeof(float));
+  cudaMalloc(&devTemp,HEIGHT*WIDTH*sizeof(float));
   cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32,0,0,0,cudaChannelFormatKindFloat);
   cudaMallocArray(&cuArray, &channelDesc,WIDTH,HEIGHT);
   tex.normalized = true;
@@ -101,7 +101,7 @@ void cleanCuda()
 {
   cudaUnbindTexture(tex);
   cudaFree(cuArray);
-  cudaFree(devSq);
+  cudaFree(devTemp);
 }
 
 __global__ void makeG(float* G, float2* U, float* gradX, float* gradY)
@@ -154,22 +154,21 @@ __global__ void gdSum(float* out, float* G, float* orig, float* def)
   {return;}
   float diff = orig[id] - def[id];
   out[id] = diff*G[id]/WIDTH/HEIGHT;
-  //out[id] = 1;
 }
 
 void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect)
 {
   for(uint p = 0; p < PARAMETERS; p++)
   {
-  gdSum<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devSq, devG+p*HEIGHT*WIDTH, devOut, devDef);
+  gdSum<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devTemp, devG+p*HEIGHT*WIDTH, devOut, devDef);
   uint size;
     size = WIDTH*HEIGHT;
     while(size>1)
     {
-      reduce<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devSq,size);
+      reduce<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
       size = (size+BLOCKSIZE-1)/BLOCKSIZE;
     }
-    cudaMemcpy(devVect+p,devSq,sizeof(float),cudaMemcpyDeviceToDevice);
+    cudaMemcpy(devVect+p,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
   }
 }
 
