@@ -9,77 +9,76 @@
 #include "CUcorrel.h"
 #include "util.h"
 
-
 using namespace std;
+
 
 int main(int argc, char** argv)
 {
 
-  struct timeval t1, t2, t0;
-  size_t taille = WIDTH*HEIGHT*sizeof(float);
-  size_t taille2 = WIDTH*HEIGHT*sizeof(float2);
-  int nbIter=20;
-  char iAddr[10] = "img.csv";
-  char oAddr[10] = "out0.csv";
-  srand(time(NULL));
-  float *orig = (float*)malloc(taille);
-  /*for(int i = 0; i < HEIGHT*WIDTH; i++)
-  {
-    orig[i] = (float)i/WIDTH/HEIGHT+(float)rand()/RAND_MAX/100;
-    //orig[i] = (float)rand()/RAND_MAX;
-  }*/
-  //float step = .001;
-  //float vecStep[PARAMETERS] = {1,1,1,1,1,1,1};
-  float vecStep[PARAMETERS] = {2,2,2,2,2,2,2};
-  //float vecStep[PARAMETERS] = {.1,.1,.1,.1,.1,.1};
-  float *devVecStep;
-  cudaMalloc(&devVecStep,PARAMETERS*sizeof(float));
-  cudaMemcpy(devVecStep,vecStep,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
+  struct timeval t0, t1, t2; // Pour mesurer les durées d'exécution
+  size_t taille = WIDTH*HEIGHT*sizeof(float); // Taille d'un tableau contenant une image
+  size_t taille2 = WIDTH*HEIGHT*sizeof(float2); // idem à 2 dimensions (fields)
+  int nbIter=20; // Le nombre d'itérations
+  char iAddr[10] = "img.csv"; // Le nom du fichier à ouvrir
+  float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
+  dim3 blocksize(min(32,WIDTH),min(32,HEIGHT)); // Pour l'appel aux kernels sur toute l'image
+  dim3 gridsize((WIDTH+31)/32,(HEIGHT+31)/32); // ...
+  dim3 tailleMat(PARAMETERS,PARAMETERS); // La taille de la hessienne
 
+  float *devOrig; // Image originale
+  float *devGradX; // Gradient de l'image d'origine par rapport à X
+  float *devGradY; // .. à Y
+  float2 *devFields; // Contient les PARAMETERS champs de déplacements élémentaires à la suite dont on cherche l'influence par autant de paramètres
+  float *devG; // Les PARAMETERS matrices gradient*champ
+  float *devParam; // Contient la valeur actuelle calculée des paramètres
+  float *devDef; // Image déformée à recaler (ici calculée à partir de l'image d'origine)
+  float *devOut; // L'image interpolée à chaque itération
+  float *devMatrix; // La hessienne utilisée pour la méthode de Newton
+  float *devInv;  // L'inverse de la Hessienne
+  float *devVec; // Vecteur pour stocker les PARAMETERS valeurs du gradient à chaque itération
+  float *devVecStep; // Multiplie terme à terme la direction avant le l'ajouter aux paramètres
+
+  srand(time(NULL)); // Seed pour générer le bruit avec rand()
+
+  // ---------- Allocation tous les tableaux du device ---------
+  cudaMalloc(&devOrig,taille);
+  cudaMalloc(&devGradX,taille);
+  cudaMalloc(&devGradY,taille);
+  cudaMalloc(&devFields,PARAMETERS*taille2);
+  cudaMalloc(&devG,PARAMETERS*taille);
+  cudaMalloc(&devParam,PARAMETERS*sizeof(float));
+  cudaMalloc(&devDef,taille);
+  cudaMalloc(&devOut,taille);
+  cudaMalloc(&devMatrix,PARAMETERS*PARAMETERS*sizeof(float));
+  cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(float));
+  cudaMalloc(&devVec,PARAMETERS*sizeof(float));
+  cudaMalloc(&devVecStep,PARAMETERS*sizeof(float));
+
+  // ---------- Lecture du fichier et écriture sur le device ---------
   readFile(iAddr,orig,256);
+  cudaMemcpy(devOrig,orig,taille,cudaMemcpyHostToDevice);
+  cudaDeviceSynchronize();
   cout << "Image d'origine" << endl;
   printMat(orig,WIDTH,HEIGHT,256);
 
-  dim3 blocksize(min(32,WIDTH),min(32,HEIGHT));
-  dim3 gridsize((WIDTH+31)/32,(HEIGHT+31)/32);
-
-  float *devOrig; // Image originale
-  float *devDef; //Image déformée à recaler (ici calculée à partir de l'image d'origine)
-  float *devGradX; //Gradient de l'image d'origine par rapport à X
-  float *devGradY; //.. à Y
-  float2 *devFields; // Contient les PARAMETERS champs de déplacements élémentaires dont on cherche l'influence par autant de paramètres
-  float *devG; //Les PARAMETERS matrices gradient*champ
-  float *devOut; // L'image interpolée à chaque itération
-
-
-  cudaMalloc(&devFields,PARAMETERS*taille2); // Les champs de déformations élémentaires correspondants aux différents modes, placés successivements dans un tableau
-
-
-  writeFields(devFields);
-  
-
-  cudaMalloc(&devOrig,taille);
-  cudaMalloc(&devDef,taille);
-  cudaMalloc(&devGradX,taille);
-  cudaMalloc(&devGradY,taille);
-
-
-  cudaMemcpy(devOrig,orig,taille,cudaMemcpyHostToDevice);
-  initCuda(devOrig);
+  // --------- Initialisation de la texture et calcul des gradients ---------
   gettimeofday(&t1,NULL);
+  initCuda(devOrig);
   gradient<<<gridsize,blocksize>>>(devGradX,devGradY);
   cudaDeviceSynchronize();
   gettimeofday(&t2,NULL);
   cout << "\nCalcul des gradients: " << timeDiff(t1,t2) << " ms." << endl;
-  
-  //-------- Vérification des gradients -------
-  cout << "Gradient Y:" << endl;
-  cudaMemcpy(orig,devGradY,taille,cudaMemcpyDeviceToHost);
-  printMat(orig,WIDTH,HEIGHT,256);
-  //-------------------------------------------
 
+  //-------- Affichage des gradients -------
+  cout << "Gradient X:" << endl;
+  cudaMemcpy(orig,devGradX,taille,cudaMemcpyDeviceToHost);
+  printMat(orig,WIDTH,HEIGHT,256);
+
+  // --------- Écriture des fields définis dans fields.cu ----------
+  writeFields(devFields);
+
+  // --------- Calcul des matrices G ----------
   gettimeofday(&t1,NULL);
-  cudaMalloc(&devG,PARAMETERS*taille);
   makeG<<<1,PARAMETERS>>>(devG,devFields,devGradX,devGradY);
   cudaDeviceSynchronize();
   if(cudaGetLastError() == cudaErrorMemoryAllocation)
@@ -89,86 +88,81 @@ int main(int argc, char** argv)
   gettimeofday(&t2,NULL);
   cout << "Calcul des matrices G: " << timeDiff(t1,t2) << " ms." << endl;
 
-
-  // ------- POUR VISUALISER G -----------
-
-  /*for(int i = 0;i < PARAMETERS;i++)
+  // ------- [Facultatif] Écriture des G en .csv pour les visualiser -----------
+  /*
+  char oAddr[3];
+  for(int i = 0;i < PARAMETERS;i++)
   {
   cudaMemcpy(orig,devG+i*WIDTH*HEIGHT,taille,cudaMemcpyDeviceToHost);
   sprintf(oAddr,"%d",i);
-  writeFile(oAddr, orig, 1);                             //
+  writeFile(oAddr, orig, 1);
   }
-  exit(0);*/
+  */
   
+  // --------- Allocation et assignation des paramètres de déformation de devDef ----------
+  float param[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3,0};
+  cout << "Paramètres réels: ";
+  for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
+  cout << endl;
+  cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
-// -- Code pour générer la Hessienne ---
+  // ---------- Calcul de l'image à recaler ----------
+  deform2D<<<gridsize,blocksize>>>(devDef,devFields,devParam);
 
-  float* devMatrix;
-  cudaMalloc(&devMatrix,PARAMETERS*PARAMETERS*sizeof(float));
-  dim3 tailleMat(PARAMETERS,PARAMETERS);
+  // ---------- Bruitage de l'image déformée ---------
+  for(int i = 0; i < WIDTH*HEIGHT ; i++)
+  { 
+    orig[i] = (float)rand()/RAND_MAX*4-2;
+  }
+  cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice);// Pour ajouter le bruit
+  addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef,devOut);
+
+  // ---------- Calcul de la Hessienne ----------
   gettimeofday(&t1,NULL);
   makeMatrix<<<1,tailleMat>>>(devMatrix,devG);
   cudaDeviceSynchronize();
   gettimeofday(&t2, NULL);
   cout << "Génération de la matrice: " << timeDiff(t1,t2) << " ms." << endl;
 
-
+  // ---------- [Facultatif] Affichage de la Hessienne ----------
   float test[PARAMETERS*PARAMETERS];
   cudaMemcpy(test,devMatrix,PARAMETERS*PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
-  cout << "\nMatrice:" << endl;
+  cout << "\nHessienne:" << endl;
   printMat(test,PARAMETERS,PARAMETERS);
 
-
-  float* devInv;
-  cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(float));
+  // ---------- Inversion de la hessienne ----------
   gettimeofday(&t1,NULL);
   invert(devMatrix,devInv);
+  cudaDeviceSynchronize();
   gettimeofday(&t2,NULL);
   cout << "Inversion de la matrice: " << timeDiff(t1,t2) << " ms." << endl;
 
+  // ---------- [Facultatif] Affichage de l'inverse ----------
   cudaMemcpy(test,devInv,PARAMETERS*PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
   cout << "\nMatrice inversée:" << endl;
   printMat(test,PARAMETERS,PARAMETERS);
 
-
-
-  float param[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3,0};
-  //float param[7] = {1,1,1,1,1,1,1};
-  cout << "Paramètres réels: ";
-  for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
-  cout << endl;
-  float* devParam;
-  cudaMalloc(&devParam,PARAMETERS*sizeof(float));
-  cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
-  
-
-  deform2D<<<gridsize,blocksize>>>(devDef,devFields,devParam); //Calcule l'image à recaler
-  for(int i = 0; i < WIDTH*HEIGHT ; i++)
-  { 
-    orig[i] = (float)rand()/RAND_MAX*4-2;
-  }
-  cudaMalloc(&devOut,taille);
-  cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice);// Pour ajouter le bruit
-  addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef,devOut);
-
+  // --------- [Facultatif] Écriture de l'image déformée en .csv pour la visualiser ----------
+  /*
+  char oAddr[10] = "out.csv";
   cudaMemcpy(orig,devDef,taille,cudaMemcpyDeviceToHost); // Pour récupérer l'image
-  writeFile(oAddr, orig, 1);                             //
+  writeFile(oAddr, orig, 1);
+  */
 
-  
-
-    //param[0] = 2.7;param[1] = -0.86;param[2] = 1.6;param[3] = .345;param[4] = 3.7;param[5] = .06;param[6] = -3.97;
-    for(int i = 0; i < PARAMETERS; i++)
-    {param[i] = 0;}
-  //readParam(argv,param); // Pour tester des valeurs sans recompiler
+  // ---------- Écriture des paramètres initiaux ----------
+  for(int i = 0; i < PARAMETERS; i++)
+  {param[i] = 0;}
+  //readParam(argv,param); // Pour tester des valeurs de paramètres par défaut sans recompiler
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
+  // ---------- Écriture du pas des paramètres ----------
+  float vecStep[PARAMETERS] = {2,2,2,2,2,2,2};
+  cudaMemcpy(devVecStep,vecStep,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   float res = 10000000000;
-
-  float* devVec;
   float oldres=0;
-  cudaMalloc(&devVec,PARAMETERS*sizeof(float));
   float vec[PARAMETERS];
+
   for(int i = 0;i < nbIter; i++)
   {
     gettimeofday(&t0,NULL);
@@ -216,20 +210,30 @@ int main(int argc, char** argv)
     cout << "\nExécution de toute la boucle: " << timeDiff(t0,t2) << "ms.\n**********************\n\n\n" << endl;
 
   }
+
+  //Vérification d'erreur éventuelle
   cudaError_t err;
   err = cudaGetLastError();
   cout << "Cuda status: " << ((err == 0)?"OK.":"ERREUR !!") << endl;
   cout << err << endl;
   if(err != 0)
   {cout << cudaGetErrorName(err) << endl;}
+
+  //Pour libérer ce qui a été alloué avec initCuda
   cleanCuda();
-  cudaFree(devOut);
-  cudaFree(devMatrix);
-  cudaFree(devG);
+
+  //On libère toute la mémoire GPU
   cudaFree(devOrig);
-  cudaFree(devDef);
   cudaFree(devGradX);
   cudaFree(devGradY);
-
+  cudaFree(devFields);
+  cudaFree(devG);
+  cudaFree(devParam);
+  cudaFree(devDef);
+  cudaFree(devOut);
+  cudaFree(devMatrix);
+  cudaFree(devInv);
+  cudaFree(devVec);
+  cudaFree(devVecStep);
   return 0;
 }
