@@ -15,7 +15,7 @@ using namespace std;
 int main(int argc, char** argv)
 {
 
-  struct timeval t1, t2;
+  struct timeval t1, t2, t0;
   size_t taille = WIDTH*HEIGHT*sizeof(float);
   size_t taille2 = WIDTH*HEIGHT*sizeof(float2);
   int nbIter=20;
@@ -132,7 +132,7 @@ int main(int argc, char** argv)
 
 
 
-  float param[PARAMETERS] = {-.2,-4.318,3.22,-1.145,1.37,2.3,0};
+  float param[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3,0};
   //float param[7] = {1,1,1,1,1,1,1};
   cout << "Paramètres réels: ";
   for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
@@ -171,6 +171,7 @@ int main(int argc, char** argv)
   float vec[PARAMETERS];
   for(int i = 0;i < nbIter; i++)
   {
+    gettimeofday(&t0,NULL);
     cout << "Boucle n°" << i+1 << endl;
     cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
     cout << "Paramètres calculés: ";
@@ -207,8 +208,11 @@ int main(int argc, char** argv)
     gettimeofday(&t1, NULL);
     oldres = res;//--
     res = residuals(devOut, devDef, HEIGHT*WIDTH)/HEIGHT/WIDTH;//--
+    if(oldres - res < 0)
+    {cout << "Augmentation de la fonctionnelle !!" << endl;}
     gettimeofday(&t2, NULL);
     cout << "\nÉcart: "<< res << ", Calcul de l'écart: " << timeDiff(t1,t2) << "ms." << endl;
+    cout << "\nExécution de toute la boucle: " << timeDiff(t0,t2) << "ms.\n**********************\n\n\n" << endl;
 
   }
   cudaError_t err;
