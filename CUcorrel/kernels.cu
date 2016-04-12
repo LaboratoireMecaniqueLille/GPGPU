@@ -159,21 +159,18 @@ __global__ void gdSum(float* out, float* G, float* orig, float* def)
 
 void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect)
 {
-  float *devTemp;
-  cudaMalloc(&devTemp,WIDTH*HEIGHT*sizeof(float));
   for(uint p = 0; p < PARAMETERS; p++)
   {
-  gdSum<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devTemp, devG+p*HEIGHT*WIDTH, devOut, devDef);
+  gdSum<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devSq, devG+p*HEIGHT*WIDTH, devOut, devDef);
   uint size;
     size = WIDTH*HEIGHT;
     while(size>1)
     {
-      reduce<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
+      reduce<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devSq,size);
       size = (size+BLOCKSIZE-1)/BLOCKSIZE;
     }
-    cudaMemcpy(devVect+p,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
+    cudaMemcpy(devVect+p,devSq,sizeof(float),cudaMemcpyDeviceToDevice);
   }
-  cudaFree(devTemp);
 }
 
 __global__ void myDot(float* A, float* b, float* out)
