@@ -186,6 +186,7 @@ int main(int argc, char** argv)
 
     gettimeofday(&t1,NULL);
     gradientDescent(devG, devOut, devDef, devVec);//--
+    cudaDeviceSynchronize();
     gettimeofday(&t2,NULL);
     cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
 
