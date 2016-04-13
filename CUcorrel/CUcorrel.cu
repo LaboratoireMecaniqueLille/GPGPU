@@ -14,8 +14,8 @@ int main(int argc, char** argv)
 {
 
   struct timeval t0, t1, t2; // Pour mesurer les durées d'exécution
-  size_t taille = WIDTH*HEIGHT*sizeof(float); // Taille d'un tableau contenant une image
-  size_t taille2 = WIDTH*HEIGHT*sizeof(float2); // idem à 2 dimensions (fields)
+  size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
+  size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
   int nbIter=20; // Le nombre d'itérations
   char iAddr[10] = "img.csv"; // Le nom du fichier à ouvrir
   float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
@@ -202,7 +202,7 @@ int main(int argc, char** argv)
 
     gettimeofday(&t1, NULL);
     oldres = res;//--
-    res = residuals(devOut, devDef, HEIGHT*WIDTH)/HEIGHT/WIDTH;//--
+    res = residuals(devOut, devDef, IMG_SIZE)/IMG_SIZE;//--
     if(oldres - res < 0)//--
     {cout << "Augmentation de la fonctionnelle !!" << endl;}//--
     gettimeofday(&t2, NULL);

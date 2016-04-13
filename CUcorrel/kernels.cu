@@ -19,8 +19,8 @@ __global__ void deform2D(float *devOut, float2* devU, float *devParam)
     u.y = 0;
     for(int i = 0; i < PARAMETERS; i++)
     {
-      u.x += devParam[i]*devU[i*WIDTH*HEIGHT+id].x;
-      u.y += devParam[i]*devU[i*WIDTH*HEIGHT+id].y;
+      u.x += devParam[i]*devU[i*IMG_SIZE+id].x;
+      u.y += devParam[i]*devU[i*IMG_SIZE+id].y;
     }
     devOut[id] = tex2D(tex,(x+.5-u.x)/WIDTH,(y+.5-u.y)/HEIGHT);
   }
@@ -117,7 +117,7 @@ void cleanCuda()
 
 __global__ void makeG(float* G, float2* U, float* gradX, float* gradY)
 {
-  uint id = threadIdx.x*WIDTH*HEIGHT;
+  uint id = threadIdx.x*IMG_SIZE;
   for(int i = 0; i < WIDTH; i++)
   {
     for(int j = 0; j < HEIGHT; j++)
@@ -143,10 +143,10 @@ __global__ void makeMatrix(float* mat, float* G)
     {
       for(uint j = 0; j < HEIGHT; j++)
       {
-        val += G[x*WIDTH*HEIGHT+j*WIDTH+i]*G[y*WIDTH*HEIGHT+j*WIDTH+i];
+        val += G[x*IMG_SIZE+j*WIDTH+i]*G[y*IMG_SIZE+j*WIDTH+i];
       }
     }
-    mat[x+y*PARAMETERS] = val/WIDTH/HEIGHT;
+    mat[x+y*PARAMETERS] = val/IMG_SIZE;
     __syncthreads();
   }
 }
@@ -156,21 +156,23 @@ __global__ void gdSum(float* out, float* G, float* orig, float* def)
   uint id = blockIdx.x*blockDim.x+threadIdx.x;
   if(id >= WIDTH * HEIGHT)
   {return;}
-  float diff = orig[id] - def[id];
-  out[id] = diff*G[id]/WIDTH/HEIGHT;
+  //float diff = orig[id] - def[id];
+  out[id] = (orig[id]-def[id])*G[id]/IMG_SIZE;
 }
 
 void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect)
 {
   for(uint p = 0; p < PARAMETERS; p++)
   {
-  gdSum<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devTemp, devG+p*HEIGHT*WIDTH, devOut, devDef);
+  gdSum<<<(IMG_SIZE+BLOCKSIZE-1)/BLOCKSIZE,min(IMG_SIZE,BLOCKSIZE)>>>(devTemp, devG+p*IMG_SIZE, devOut, devDef);
   uint size;
+  uint blocksize;
     size = WIDTH*HEIGHT;
     while(size>1)
     {
-      reduce<<<(size+2*BLOCKSIZE-1)/2/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
-      size = (size+2*BLOCKSIZE-1)/2/BLOCKSIZE;
+      blocksize = (size+2*BLOCKSIZE-1)/2/BLOCKSIZE;
+      reduce<<<blocksize,BLOCKSIZE>>>(devTemp,size);
+      size = blocksize;
     }
     cudaMemcpy(devVect+p,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
   }
