@@ -42,11 +42,11 @@ TODO: Optimiser la façon dont le kernel somme les éléments (et rendre possibl
 voir le lien ci dessous:
 http://docs.nvidia.com/cuda/samples/6_Advanced/reduction/doc/reduction.pdf
 */
-  uint id = blockDim.x*blockIdx.x+threadIdx.x;
-  if(id > size) //Si appelé plus que nécessaire, quitter
+  uint id = 2*blockDim.x*blockIdx.x+threadIdx.x;
+  if(id > 2*size) //Si appelé plus que nécessaire, quitter
   {return;}
   __shared__ float array[BLOCKSIZE]; //Contient les éléments de chaque bloc, utilisé pour stocker les valeurs temporaires
-  array[threadIdx.x] = data[id]; //Chaque thread copie une valeur
+  array[threadIdx.x] = data[id] + data[blockDim.x+id]; //Chaque thread copie une valeur
   __syncthreads(); // On attend tout le monde pour être sûr d'avoir toutes les valeurs écrites
   for(unsigned int s = blockDim.x/2;s>0;s/=2) //On divise par 2 le nombre de sommes à effectuer à chaque fois -> à optimiser car une partie des threads tourne dans le vide...
   {
@@ -74,8 +74,8 @@ float residuals(float* devData1, float* devData2, uint size)
   lsq<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devTemp, devData1, devData2, HEIGHT*WIDTH);
   while(size>1)
   {
-    reduce<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
-    size = (size+BLOCKSIZE-1)/BLOCKSIZE;
+    reduce<<<(size+2*BLOCKSIZE-1)/2/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
+    size = (size+2*BLOCKSIZE-1)/2/BLOCKSIZE;
   }
   float out;
   cudaMemcpy(&out,devTemp,sizeof(float),cudaMemcpyDeviceToHost);
@@ -156,8 +156,8 @@ void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect)
     size = WIDTH*HEIGHT;
     while(size>1)
     {
-      reduce<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
-      size = (size+BLOCKSIZE-1)/BLOCKSIZE;
+      reduce<<<(size+2*BLOCKSIZE-1)/2/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
+      size = (size+2*BLOCKSIZE-1)/2/BLOCKSIZE;
     }
     cudaMemcpy(devVect+p,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
   }
