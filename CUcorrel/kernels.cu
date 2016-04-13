@@ -118,7 +118,7 @@ __global__ void makeMatrix(float* mat, float* G)
 {
   uint x = threadIdx.x;
   uint y = threadIdx.y;
-  if(x < y)
+  if(x < y) // La matrice est symétrique: on ne calcule pas les coefficients connus mais on attend qu'ils soient calculés et on les copie
   {
     __syncthreads();
     mat[x+y*PARAMETERS] = mat[y+x*PARAMETERS];
@@ -126,7 +126,7 @@ __global__ void makeMatrix(float* mat, float* G)
   else
   {
     float val = 0;
-    for(uint i = 0; i < WIDTH; i++)
+    for(uint i = 0; i < WIDTH; i++) // Possibilté de faire un kernel de réduction device ? (pas prioritaire car cette donction n'est lancée qu'une fois)
     {
       for(uint j = 0; j < HEIGHT; j++)
       {
