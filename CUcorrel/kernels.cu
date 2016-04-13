@@ -37,6 +37,11 @@ __global__ void lsq(float* out, float* devA, float* devB, int length)
 __global__ void reduce(float* data, uint size)
 {
   //Réduit efficacement (ou pas) en sommant tout un tableau et en écrivant les somme restantes de chaque bloc au début du tableau (à appeler plusieurs fois pour sommer plus de 1024 éléments).
+/*
+TODO: Optimiser la façon dont le kernel somme les éléments (et rendre possible le cas size != 2^k)
+voir le lien ci dessous:
+http://docs.nvidia.com/cuda/samples/6_Advanced/reduction/doc/reduction.pdf
+*/
   uint id = blockDim.x*blockIdx.x+threadIdx.x;
   if(id > size) //Si appelé plus que nécessaire, quitter
   {return;}
@@ -64,15 +69,8 @@ __global__ void gradient(float* gradX, float* gradY)
   gradY[x+y*WIDTH]=tex2D(tex,(x+.5)/WIDTH,(y+1.)/HEIGHT)-tex2D(tex,(x+.5)/WIDTH,(float)y/HEIGHT);
 }
 
-
-
 float residuals(float* devData1, float* devData2, uint size)
 {
-/*
-TODO: Optimiser le kernel de réduction pour sommer tous les éléments !
-voir le lien ci dessous:
-http://docs.nvidia.com/cuda/samples/6_Advanced/reduction/doc/reduction.pdf
-*/
   lsq<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devTemp, devData1, devData2, HEIGHT*WIDTH);
   while(size>1)
   {
@@ -114,7 +112,6 @@ __global__ void makeG(float* G, float2* U, float* gradX, float* gradY)
       G[id+j*WIDTH+i] = gradX[j*WIDTH+i]*U[id+j*WIDTH+i].x+gradY[j*WIDTH+i]*U[id+j*WIDTH+i].y;
     }
   }
-
 }
 
 __global__ void makeMatrix(float* mat, float* G)
@@ -128,17 +125,11 @@ __global__ void makeMatrix(float* mat, float* G)
   }
   else
   {
-    /*func l_f[PARAMETERS];
-    for(int i = 0;i < PARAMETERS; i++)
-    {
-      l_f[i] = f[i];
-    }*/
     float val = 0;
     for(uint i = 0; i < WIDTH; i++)
     {
       for(uint j = 0; j < HEIGHT; j++)
       {
-        //val += (Gx[i+j*WIDTH]*U[HEIGHT*WIDTH*x+j*WIDTH+i].x+Gy[i+j*WIDTH]*U[HEIGHT*WIDTH*x+j*WIDTH+i].y) * (Gx[i+j*WIDTH]*U[HEIGHT*WIDTH*y+j*WIDTH+i].x+Gy[i+j*WIDTH]*U[HEIGHT*WIDTH*y+j*WIDTH+i].y);
         val += G[x*WIDTH*HEIGHT+j*WIDTH+i]*G[y*WIDTH*HEIGHT+j*WIDTH+i];
       }
     }
@@ -197,4 +188,3 @@ __global__ void ewMul(float* A, float* B)
   int x = threadIdx.x;
   A[x] *= B[x];
 }
-
