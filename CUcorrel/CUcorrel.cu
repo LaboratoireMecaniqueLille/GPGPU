@@ -159,10 +159,12 @@ int main(int argc, char** argv)
   float vecStep[PARAMETERS] = {2,2,2,2,2,2,2};
   cudaMemcpy(devVecStep,vecStep,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
-  float res = 10000000000;
-  float oldres=0;
-  float vec[PARAMETERS];
-
+  float res = 10000000000; // Le résidu (valeur hénaurme pour être sûr d'avoir une décroissante à la première itération)
+  float oldres; // Pour stocker le résidu de l'itération précédente et comparer
+  float vec[PARAMETERS]; // Pour stocker sur l'hôte les paramètres calculés
+  
+  // ---------- La boucle principale ---------
+  //Note: seules les instructions marquées par //-- sont réellement nécessaires, les autres sont opour la débug/le timing
   for(int i = 0;i < nbIter; i++)
   {
     gettimeofday(&t0,NULL);
@@ -211,7 +213,7 @@ int main(int argc, char** argv)
 
   }
 
-  //Vérification d'erreur éventuelle
+  // ---------- Vérification d'erreur éventuelle ----------
   cudaError_t err;
   err = cudaGetLastError();
   cout << "Cuda status: " << ((err == 0)?"OK.":"ERREUR !!") << endl;
@@ -219,10 +221,10 @@ int main(int argc, char** argv)
   if(err != 0)
   {cout << cudaGetErrorName(err) << endl;}
 
-  //Pour libérer ce qui a été alloué avec initCuda
+  // ---------- Libération de ce qui a été alloué avec initCuda ----------
   cleanCuda();
 
-  //On libère toute la mémoire GPU
+  // ---------- Libération des arrays dans la mémoire du device ----------
   cudaFree(devOrig);
   cudaFree(devGradX);
   cudaFree(devGradY);
@@ -235,5 +237,8 @@ int main(int argc, char** argv)
   cudaFree(devInv);
   cudaFree(devVec);
   cudaFree(devVecStep);
+
+  // ---------- Libération des arrays de l'hôte ----------
+  free(orig);
   return 0;
 }
