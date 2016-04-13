@@ -34,6 +34,16 @@ __global__ void lsq(float* out, float* devA, float* devB, int length)
   out[id] = (devA[id]-devB[id])*(devA[id]-devB[id]);
 }
 
+__device__ void warpReduce(volatile float* sh_data, uint tid)
+{
+  sh_data[tid] += sh_data[tid+32];
+  sh_data[tid] += sh_data[tid+16];
+  sh_data[tid] += sh_data[tid+8];
+  sh_data[tid] += sh_data[tid+4];
+  sh_data[tid] += sh_data[tid+2];
+  sh_data[tid] += sh_data[tid+1];
+}
+
 __global__ void reduce(float* data, uint size)
 {
   //Réduit efficacement (ou pas) en sommant tout un tableau et en écrivant les somme restantes de chaque bloc au début du tableau (à appeler plusieurs fois pour sommer plus de 1024 éléments).
@@ -43,18 +53,21 @@ voir le lien ci dessous:
 http://docs.nvidia.com/cuda/samples/6_Advanced/reduction/doc/reduction.pdf
 */
   uint id = 2*blockDim.x*blockIdx.x+threadIdx.x;
+  uint tid = threadIdx.x;
   if(id > 2*size) //Si appelé plus que nécessaire, quitter
   {return;}
   __shared__ float array[BLOCKSIZE]; //Contient les éléments de chaque bloc, utilisé pour stocker les valeurs temporaires
-  array[threadIdx.x] = data[id] + data[blockDim.x+id]; //Chaque thread copie une valeur
+  array[tid] = data[id] + data[BLOCKSIZE+id]; //Chaque thread copie une valeur
   __syncthreads(); // On attend tout le monde pour être sûr d'avoir toutes les valeurs écrites
-  for(unsigned int s = blockDim.x/2;s>0;s/=2) //On divise par 2 le nombre de sommes à effectuer à chaque fois -> à optimiser car une partie des threads tourne dans le vide...
+  for(uint s = blockDim.x/2; s > 32; s >>= 1) //On divise par 2 le nombre de sommes à effectuer à chaque fois -> à optimiser car une partie des threads tourne dans le vide...
   {
-    if(threadIdx.x < s)
-    {array[threadIdx.x] += array[threadIdx.x+s];} //On effectue ladite somme...
+    if(tid < s)
+    {array[tid] += array[tid+s];} //On effectue ladite somme...
   __syncthreads(); // On attend que tout le monde ai fini avant de réitérer
   }
-  if(threadIdx.x == 0)
+  if(tid < 32)
+  {warpReduce(array,tid);}
+  if(tid == 0)
   {data[blockIdx.x] = array[0];} // Le thread de tête écrit le résultat de son bloc dans le tableau
 }
 
