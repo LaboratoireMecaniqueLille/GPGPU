@@ -98,7 +98,7 @@ int main(int argc, char** argv)
   */
   
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
-  float param[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3,0};
+  float param[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3};
   cout << "Paramètres réels: ";
   for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
   cout << endl;
@@ -154,7 +154,7 @@ int main(int argc, char** argv)
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   // ---------- Écriture du pas des paramètres ----------
-  float vecStep[PARAMETERS] = {2,2,2,2,2,2,2};
+  float vecStep[PARAMETERS] = {2,2,2,2,2,2};
   cudaMemcpy(devVecStep,vecStep,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   float res = 10000000000; // Le résidu (valeur hénaurme pour être sûr d'avoir une décroissante à la première itération)

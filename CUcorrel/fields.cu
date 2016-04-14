@@ -1,4 +1,5 @@
 #include "CUcorrel.h"
+//#include "util.h"
 
 //7 champs: 3 mvt de corps solide, 2 déformations uniformes et 2 cisaillements
 
@@ -64,22 +65,11 @@ void writeFields(float2* devFields)
   {
     for(int j = 0; j < HEIGHT; j++)
     {
-      field[i+WIDTH*j].x = 2.*j/HEIGHT-1.; // Shear X
-      field[i+WIDTH*j].y = 0; 
+      field[i+WIDTH*j].x = 1.4142135624*j/HEIGHT-.5; // Shear
+      field[i+WIDTH*j].y = 1.4142135624*i/WIDTH-.5; 
     }
   }
   //printMat2D(field,WIDTH,HEIGHT,256);
   cudaMemcpy(devFields+5*WIDTH*HEIGHT,field,taille2,cudaMemcpyHostToDevice);
-
-  for(int i = 0; i < WIDTH; i++)
-  {
-    for(int j = 0; j < HEIGHT; j++)
-    {
-      field[i+WIDTH*j].x = 0; // Shear Y
-      field[i+WIDTH*j].y = 2.*i/WIDTH-1;
-    }
-  }
-  //printMat2D(field,WIDTH,HEIGHT,256);
-  cudaMemcpy(devFields+6*WIDTH*HEIGHT,field,taille2,cudaMemcpyHostToDevice);
   free(field);
 }
