@@ -201,47 +201,47 @@ int main(int argc, char** argv)
   for(int i = 0;i < nbIter; i++)
   {
     gettimeofday(&t0,NULL);
-    cout << "Boucle n°" << i+1 << endl;
-    cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
-    cout << "Paramètres calculés: ";
-    for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
-    cout << endl;
+    //cout << "Boucle n°" << i+1 << endl;
+    //cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
+    //cout << "Paramètres calculés: ";
+    //for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
+    //cout << endl;
 
-    gettimeofday(&t1,NULL);
+    //gettimeofday(&t1,NULL);
     deform2D<<<gridsize,blocksize>>>(tex, devOut, devFields, devParam);//--
-    cudaDeviceSynchronize();
-    gettimeofday(&t2, NULL);
-    cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
+    //cudaDeviceSynchronize();
+    //gettimeofday(&t2, NULL);
+    //cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
 
-    gettimeofday(&t1,NULL);
+    //gettimeofday(&t1,NULL);
     gradientDescent(devG, devOut, devDef, devVec);//--
-    cudaDeviceSynchronize();
-    gettimeofday(&t2,NULL);
-    cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
+    //cudaDeviceSynchronize();
+    //gettimeofday(&t2,NULL);
+    //cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
 
-    cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
-    cout << "Gradient des paramètres:" << endl;
-    printMat(vec,PARAMETERS,1);
+    //cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
+    //cout << "Gradient des paramètres:" << endl;
+    //printMat(vec,PARAMETERS,1);
     
-    gettimeofday(&t1,NULL);
+    //gettimeofday(&t1,NULL);
     myDot<<<1,PARAMETERS,PARAMETERS*sizeof(float)>>>(devInv,devVec,devVec);//--
     ewMul<<<1,PARAMETERS>>>(devVec,devVecStep);//--
     addVec<<<1,PARAMETERS>>>(devParam,devVec);//--
     cudaDeviceSynchronize();
-    gettimeofday(&t2,NULL);
-    cout << "Mise à jour des valeurs: " << timeDiff(t1,t2) << " ms." << endl;
+    //gettimeofday(&t2,NULL);
+    //cout << "Mise à jour des valeurs: " << timeDiff(t1,t2) << " ms." << endl;
 
-    cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
-    cout << "Direction:" << endl;
-    printMat(vec,PARAMETERS,1);
+    //cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
+    //cout << "Direction:" << endl;
+    //printMat(vec,PARAMETERS,1);
 
-    gettimeofday(&t1, NULL);
-    oldres = res;//--
-    res = residuals(devOut, devDef, IMG_SIZE)/IMG_SIZE;//--
-    if(oldres - res < 0)//--
-    {cout << "Augmentation de la fonctionnelle !!" << endl;}//--
+    //gettimeofday(&t1, NULL);
+    //oldres = res;//--
+    //res = residuals(devOut, devDef, IMG_SIZE)/IMG_SIZE;//--
+    //if(oldres - res < 0)//--
+    //{cout << "Augmentation de la fonctionnelle !!" << endl;}//--
     gettimeofday(&t2, NULL);
-    cout << "\nÉcart: "<< res << ", Calcul de l'écart: " << timeDiff(t1,t2) << "ms." << endl;
+    //cout << "\nÉcart: "<< res << ", Calcul de l'écart: " << timeDiff(t1,t2) << "ms." << endl;
     cout << "\nExécution de toute la boucle: " << timeDiff(t0,t2) << "ms.\n**********************\n\n\n" << endl;
 
   }
