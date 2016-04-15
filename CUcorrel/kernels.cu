@@ -1,11 +1,13 @@
 #include <iostream>
 #include "CUcorrel.h"
 
+texture<float, cudaTextureType2D, cudaReadModeElementType> tex;
+cudaArray* cuArray;
 float *devTemp;
 
 using namespace std;
 
-__global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam)
+__global__ void deform2D(float *devOut, float2* devU, float *devParam)
 {
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
@@ -20,7 +22,7 @@ __global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, fl
       u.x += devParam[i]*devU[i*IMG_SIZE+id].x;
       u.y += devParam[i]*devU[i*IMG_SIZE+id].y;
     }
-    devOut[id] = tex2D<float>(tex,(x+.5f-u.x)/WIDTH,(y+.5f-u.y)/HEIGHT);
+    devOut[id] = tex2D(tex,(x+.5-u.x)/WIDTH,(y+.5-u.y)/HEIGHT);
   }
 }
 
@@ -69,20 +71,20 @@ http://docs.nvidia.com/cuda/samples/6_Advanced/reduction/doc/reduction.pdf
   {data[blockIdx.x] = array[0];} // Le thread de tête écrit le résultat de son bloc dans le tableau
 }
 
-__global__ void gradient(cudaTextureObject_t tex, float* gradX, float* gradY)
+__global__ void gradient(float* gradX, float* gradY)
 {
   //Utilise l'algo le plus simple: les différences centrées.
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
   if(x >= WIDTH || y >= HEIGHT)
   {return;}
-  gradX[x+y*WIDTH]=tex2D<float>(tex,(x+1.f)/WIDTH,(y+.5f)/HEIGHT)-tex2D<float>(tex,(float)x/WIDTH,(y+.5f)/HEIGHT);
-  gradY[x+y*WIDTH]=tex2D<float>(tex,(x+.5f)/WIDTH,(y+1.f)/HEIGHT)-tex2D<float>(tex,(x+.5f)/WIDTH,(float)y/HEIGHT);
+  gradX[x+y*WIDTH]=tex2D(tex,(x+1.)/WIDTH,(y+.5)/HEIGHT)-tex2D(tex,(float)x/WIDTH,(y+.5)/HEIGHT);
+  gradY[x+y*WIDTH]=tex2D(tex,(x+.5)/WIDTH,(y+1.)/HEIGHT)-tex2D(tex,(x+.5)/WIDTH,(float)y/HEIGHT);
 }
 
 float residuals(float* devData1, float* devData2, uint size)
 {
-  lsq<<<(IMG_SIZE+BLOCKSIZE-1)/BLOCKSIZE,min(IMG_SIZE,BLOCKSIZE)>>>(devTemp, devData1, devData2, IMG_SIZE);
+  lsq<<<(HEIGHT*WIDTH+BLOCKSIZE-1)/BLOCKSIZE,min(HEIGHT*WIDTH,BLOCKSIZE)>>>(devTemp, devData1, devData2, HEIGHT*WIDTH);
   while(size>1)
   {
     reduce<<<(size+2*BLOCKSIZE-1)/2/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
@@ -96,10 +98,20 @@ float residuals(float* devData1, float* devData2, uint size)
 void initCuda(float* data)
 {
   cudaMalloc(&devTemp,HEIGHT*WIDTH*sizeof(float));
+  cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32,0,0,0,cudaChannelFormatKindFloat);
+  cudaMallocArray(&cuArray, &channelDesc,WIDTH,HEIGHT);
+  tex.normalized = true;
+  tex.filterMode = cudaFilterModeLinear;//cudaFilterModePoint;
+  tex.addressMode[0] = cudaAddressModeClamp;//cudaAddressModeBorder;
+  tex.addressMode[1] = cudaAddressModeClamp;//cudaAddressModeBorder;
+  cudaMemcpyToArray(cuArray,0,0,data,WIDTH*HEIGHT*sizeof(float),cudaMemcpyHostToDevice);
+  cudaBindTextureToArray(tex,cuArray,channelDesc);
 }
 
 void cleanCuda()
 {
+  cudaUnbindTexture(tex);
+  cudaFree(cuArray);
   cudaFree(devTemp);
 }
 

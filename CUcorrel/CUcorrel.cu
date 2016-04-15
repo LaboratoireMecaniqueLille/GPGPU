@@ -51,60 +51,26 @@ int main(int argc, char** argv)
   cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(float));
   cudaMalloc(&devVec,PARAMETERS*sizeof(float));
   cudaMalloc(&devVecStep,PARAMETERS*sizeof(float));
-  if(cudaGetLastError() == cudaErrorMemoryAllocation)
-  {cout << "Erreur d'allocation (manque de mémoire graphique ?)" << endl;exit(-1);}
-  else if(cudaGetLastError() != cudaSuccess)
-  {cout << "Erreur lors de l'allocation." << endl;exit(-1);}
 
   // ---------- Lecture du fichier et écriture sur le device ---------
   readFile(iAddr,orig,256);
   cudaMemcpy(devOrig,orig,taille,cudaMemcpyHostToDevice);
   cudaDeviceSynchronize();
-
-  // ---------- [Facultatif] Affichage de l'image fixe ----------
   cout << "Image d'origine" << endl;
   printMat(orig,WIDTH,HEIGHT,256);
 
-  // ---------- Allocation de la bindless texture et copie des données ----------
-  cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32,0,0,0,cudaChannelFormatKindFloat);
-  cudaArray* cuArray2;
-  cudaMallocArray(&cuArray2, &channelDesc,WIDTH,HEIGHT);
-
-  cudaResourceDesc resDesc;
-  memset(&resDesc, 0, sizeof(resDesc));
-  resDesc.resType = cudaResourceTypeArray;
-  resDesc.res.linear.devPtr = cuArray2;
-  resDesc.res.linear.desc.f = cudaChannelFormatKindFloat;
-  resDesc.res.linear.desc.x = 32;
-  resDesc.res.linear.sizeInBytes = IMG_SIZE*sizeof(float);
-
-  cudaTextureDesc texDesc;
-  memset(&texDesc, 0, sizeof(texDesc));
-  texDesc.readMode = cudaReadModeElementType;
-  texDesc.addressMode[0] = cudaAddressModeClamp;
-  texDesc.addressMode[1] = cudaAddressModeClamp;
-  texDesc.filterMode = cudaFilterModeLinear;
-  texDesc.normalizedCoords = 1;
-
-  cudaMemcpyToArray(cuArray2,0,0,orig,IMG_SIZE*sizeof(float),cudaMemcpyHostToDevice);
-  cudaTextureObject_t tex=0;
-  cudaCreateTextureObject(&tex,&resDesc,&texDesc,NULL);
-
-
   // --------- Initialisation de la texture et calcul des gradients ---------
   gettimeofday(&t1,NULL);
-  initCuda(orig);
-  gradient<<<gridsize,blocksize>>>(tex,devGradX,devGradY);
+  initCuda(devOrig);
+  gradient<<<gridsize,blocksize>>>(devGradX,devGradY);
   cudaDeviceSynchronize();
   gettimeofday(&t2,NULL);
   cout << "\nCalcul des gradients: " << timeDiff(t1,t2) << " ms." << endl;
 
-  //-------- [Facultatif] Affichage des gradients -------
-  /*
+  //-------- Affichage des gradients -------
   cout << "Gradient X:" << endl;
   cudaMemcpy(orig,devGradX,taille,cudaMemcpyDeviceToHost);
   printMat(orig,WIDTH,HEIGHT,256);
-  */
 
   // --------- Écriture des fields définis dans fields.cu ----------
   writeFields(devFields);
@@ -113,6 +79,10 @@ int main(int argc, char** argv)
   gettimeofday(&t1,NULL);
   makeG<<<1,PARAMETERS>>>(devG,devFields,devGradX,devGradY);
   cudaDeviceSynchronize();
+  if(cudaGetLastError() == cudaErrorMemoryAllocation)
+  {cout << "Erreur d'allocation (manque de mémoire graphique ?)" << endl;exit(-1);}
+  else if(cudaGetLastError() != cudaSuccess)
+  {cout << "Erreur lors de l'allocation." << endl;exit(-1);}
   gettimeofday(&t2,NULL);
   cout << "Calcul des matrices G: " << timeDiff(t1,t2) << " ms." << endl;
 
@@ -135,7 +105,7 @@ int main(int argc, char** argv)
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   // ---------- Calcul de l'image à recaler ----------
-  deform2D<<<gridsize,blocksize>>>(tex, devDef,devFields,devParam);
+  deform2D<<<gridsize,blocksize>>>(devDef,devFields,devParam);
 
   // ---------- Bruitage de l'image déformée ---------
   for(int i = 0; i < WIDTH*HEIGHT ; i++)
@@ -144,18 +114,6 @@ int main(int argc, char** argv)
   }
   cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice);// Pour ajouter le bruit
   addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef,devOut);
-
-  // ---------- [Facultatif] Affichage de l'image déformée ----------
-  cudaMemcpy(orig,devDef,IMG_SIZE*sizeof(float),cudaMemcpyDeviceToHost);
-  cout << "Image déformée:\n" << endl;
-  printMat(orig,WIDTH,HEIGHT,256);
-
-  // --------- [Facultatif] Écriture de l'image déformée en .csv pour la visualiser ----------
-  /*
-  char oAddr[10] = "out.csv";
-  cudaMemcpy(orig,devDef,taille,cudaMemcpyDeviceToHost); // Pour récupérer l'image
-  writeFile(oAddr, orig, 256);
-  */
 
   // ---------- Calcul de la Hessienne ----------
   gettimeofday(&t1,NULL);
@@ -181,6 +139,13 @@ int main(int argc, char** argv)
   cudaMemcpy(test,devInv,PARAMETERS*PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
   cout << "\nMatrice inversée:" << endl;
   printMat(test,PARAMETERS,PARAMETERS);
+
+  // --------- [Facultatif] Écriture de l'image déformée en .csv pour la visualiser ----------
+  /*
+  char oAddr[10] = "out.csv";
+  cudaMemcpy(orig,devDef,taille,cudaMemcpyDeviceToHost); // Pour récupérer l'image
+  writeFile(oAddr, orig, 1);
+  */
 
   // ---------- Écriture des paramètres initiaux ----------
   for(int i = 0; i < PARAMETERS; i++)
@@ -208,7 +173,7 @@ int main(int argc, char** argv)
     cout << endl;
 
     gettimeofday(&t1,NULL);
-    deform2D<<<gridsize,blocksize>>>(tex, devOut, devFields, devParam);//--
+    deform2D<<<gridsize,blocksize>>>(devOut, devFields, devParam);//--
     cudaDeviceSynchronize();
     gettimeofday(&t2, NULL);
     cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
