@@ -5,7 +5,7 @@ float *devTemp;
 
 using namespace std;
 
-__global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam, uint w, uint h)
+__global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam, const uint w, const uint h)
 {
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
@@ -24,7 +24,7 @@ __global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, fl
   }
 }
 
-__global__ void lsq(float* out, float* devA, float* devB, int length)
+__global__ void lsq(float* out, float* devA, float* devB, const uint length)
 {
   uint id = blockDim.x*blockIdx.x+threadIdx.x;
   if(id > length)
@@ -32,7 +32,7 @@ __global__ void lsq(float* out, float* devA, float* devB, int length)
   out[id] = (devA[id]-devB[id])*(devA[id]-devB[id]);
 }
 
-__device__ void warpReduce(volatile float* sh_data, uint tid)
+__device__ void warpReduce(volatile float* sh_data, const uint tid)
 {
   sh_data[tid] += sh_data[tid+32];
   sh_data[tid] += sh_data[tid+16];
@@ -42,11 +42,11 @@ __device__ void warpReduce(volatile float* sh_data, uint tid)
   sh_data[tid] += sh_data[tid+1];
 }
 
-__global__ void reduce(float* data, uint size)
+__global__ void reduce(float* data, const uint size)
 {
-  //Réduit efficacement (ou pas) en sommant tout un tableau et en écrivant les somme restantes de chaque bloc au début du tableau (à appeler plusieurs fois pour sommer plus de 1024 éléments).
+  //Réduit relativement efficacement en sommant tout un tableau et en écrivant les somme restantes de chaque bloc au début du tableau (à appeler plusieurs fois pour sommer plus de 1024 éléments).
 /*
-TODO: Optimiser la façon dont le kernel somme les éléments (et rendre possible le cas size != 2^k)
+TODO: Rendre possible le cas size != 2^k
 voir le lien ci dessous:
 http://docs.nvidia.com/cuda/samples/6_Advanced/reduction/doc/reduction.pdf
 */

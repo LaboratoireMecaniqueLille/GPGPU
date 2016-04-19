@@ -16,7 +16,7 @@ int main(int argc, char** argv)
   struct timeval t0, t1, t2; // Pour mesurer les durées d'exécution
   size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
   size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
-  int nbIter=20; // Le nombre d'itérations
+  int nbIter=5; // Le nombre d'itérations
   char iAddr[10] = "img.csv"; // Le nom du fichier à ouvrir
   float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
   dim3 blocksize(min(32,WIDTH),min(32,HEIGHT)); // Pour l'appel aux kernels sur toute l'image
