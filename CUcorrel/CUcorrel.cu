@@ -139,6 +139,8 @@ int main(int argc, char** argv)
   
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
   float param[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3};
+  for(int i = 0; i < PARAMETERS; i++)
+  {param[i] = 6.f*rand()/RAND_MAX-3.f;}
   cout << "Paramètres réels: ";
   for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
   cout << endl;
