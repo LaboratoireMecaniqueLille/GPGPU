@@ -9,6 +9,7 @@ __global__ void myDot(float*, float*, float*);
 __global__ void addVec(float*, float*);
 __global__ void ewMul(float*,float*);
 float residuals(float*, float*, uint);
-void initCuda(float*);
+void initCuda();
+void genMip(cudaTextureObject_t, cudaArray*, uint, uint);
 void cleanCuda();
 void gradientDescent(float*, float*, float*, float*);

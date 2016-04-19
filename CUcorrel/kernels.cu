@@ -93,7 +93,7 @@ float residuals(float* devData1, float* devData2, uint size)
   return out;
 }
 
-void initCuda(float* data)
+void initCuda()
 {
   cudaMalloc(&devTemp,HEIGHT*WIDTH*sizeof(float));
 }
@@ -190,4 +190,20 @@ __global__ void ewMul(float* A, float* B)
 {
   int x = threadIdx.x;
   A[x] *= B[x];
+}
+
+__global__ void mipKernel(cudaTextureObject_t tex, float* out, const uint w, const uint h)
+{
+  uint x = blockIdx.x*blockDim.x+threadIdx.x;
+  uint y = blockIdx.y*blockDim.y+threadIdx.y;
+  out[x+w*y/2] = tex2D<float>(tex,(2*x+1)/w,(2*y+1)/h);
+}
+
+void genMip(cudaTextureObject_t tex, cudaArray* array, uint w, uint h)
+{
+  dim3 gridsize((w+31)/32,(h+31)/32);
+  dim3 blocksize(min(w,32),min(h,32));
+  //cout << "Génération du mipmap de taille " << w << ", " << h << endl;
+  mipKernel<<<gridsize,blocksize>>>(tex, devTemp, w, h);
+  cudaMemcpyToArray(array,0,0,devTemp,w*h*sizeof(float),cudaMemcpyDeviceToDevice);
 }
