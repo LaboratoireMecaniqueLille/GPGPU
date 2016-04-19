@@ -117,7 +117,7 @@ int main(int argc, char** argv)
   */
 
   // --------- Écriture des fields définis dans fields.cu ----------
-  writeFields(devFields);
+  writeFields(devFields,WIDTH,HEIGHT);
 
   // --------- Calcul des matrices G ----------
   gettimeofday(&t1,NULL);
@@ -147,7 +147,7 @@ int main(int argc, char** argv)
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   // ---------- Calcul de l'image à recaler ----------
-  deform2D<<<gridsize,blocksize>>>(tex[0], devDef,devFields,devParam);
+  deform2D<<<gridsize,blocksize>>>(tex[0], devDef,devFields,devParam,WIDTH,HEIGHT);
 
   // ---------- Bruitage de l'image déformée ---------
   for(int i = 0; i < WIDTH*HEIGHT ; i++)
@@ -220,7 +220,7 @@ int main(int argc, char** argv)
     cout << endl;
 
     gettimeofday(&t1,NULL);
-    deform2D<<<gridsize,blocksize>>>(tex[0], devOut, devFields, devParam);//--
+    deform2D<<<gridsize,blocksize>>>(tex[0], devOut, devFields, devParam,WIDTH,HEIGHT);//--
     cudaDeviceSynchronize();
     gettimeofday(&t2, NULL);
     cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;

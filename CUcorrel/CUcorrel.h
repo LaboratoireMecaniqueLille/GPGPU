@@ -10,5 +10,5 @@
 typedef unsigned int uint;
 typedef unsigned char uchar;
 
-void writeFields(float2*);
+void writeFields(float2*, uint, uint);
 #endif //ifndef CUCORREL
