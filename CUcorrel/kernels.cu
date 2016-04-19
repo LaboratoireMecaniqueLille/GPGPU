@@ -5,22 +5,22 @@ float *devTemp;
 
 using namespace std;
 
-__global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam)
+__global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam, uint w, uint h)
 {
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
-  if(x < WIDTH && y < HEIGHT)
+  if(x < w && y < h)
   {
-    uint id = x+y*WIDTH;
+    uint id = x+y*w;
     float2 u;
     u.x = 0;
     u.y = 0;
     for(int i = 0; i < PARAMETERS; i++)
     {
-      u.x += devParam[i]*devU[i*IMG_SIZE+id].x;
-      u.y += devParam[i]*devU[i*IMG_SIZE+id].y;
+      u.x += devParam[i]*devU[i*w*h+id].x;
+      u.y += devParam[i]*devU[i*w*h+id].y;
     }
-    devOut[id] = tex2D<float>(tex,(x+.5f-u.x)/WIDTH,(y+.5f-u.y)/HEIGHT);
+    devOut[id] = tex2D<float>(tex,(x+.5f-u.x)/w,(y+.5f-u.y)/h);
   }
 }
 
