@@ -74,15 +74,13 @@ __global__ void gradient(cudaTextureObject_t tex, float* gradX, float* gradY)
   //Utilise l'algo le plus simple: les différences centrées.
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
-  if(x >= WIDTH || y >= HEIGHT)
-  {return;}
   gradX[x+y*WIDTH]=tex2D<float>(tex,(x+1.f)/WIDTH,(y+.5f)/HEIGHT)-tex2D<float>(tex,(float)x/WIDTH,(y+.5f)/HEIGHT);
   gradY[x+y*WIDTH]=tex2D<float>(tex,(x+.5f)/WIDTH,(y+1.f)/HEIGHT)-tex2D<float>(tex,(x+.5f)/WIDTH,(float)y/HEIGHT);
 }
 
 float residuals(float* devData1, float* devData2, uint size)
 {
-  lsq<<<(IMG_SIZE+BLOCKSIZE-1)/BLOCKSIZE,min(IMG_SIZE,BLOCKSIZE)>>>(devTemp, devData1, devData2, IMG_SIZE);
+  lsq<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp, devData1, devData2, size);
   while(size>1)
   {
     reduce<<<(size+2*BLOCKSIZE-1)/2/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
@@ -103,14 +101,14 @@ void cleanCuda()
   cudaFree(devTemp);
 }
 
-__global__ void makeG(float* G, float2* U, float* gradX, float* gradY)
+__global__ void makeG(float* G, float2* U, float* gradX, float* gradY, uint w, uint h)
 {
-  uint id = threadIdx.x*IMG_SIZE;
-  for(int i = 0; i < WIDTH; i++)
+  uint id = threadIdx.x*w*h;
+  for(int i = 0; i < w; i++)
   {
-    for(int j = 0; j < HEIGHT; j++)
+    for(int j = 0; j < h; j++)
     {
-      G[id+j*WIDTH+i] = gradX[j*WIDTH+i]*U[id+j*WIDTH+i].x+gradY[j*WIDTH+i]*U[id+j*WIDTH+i].y;
+      G[id+j*w+i] = gradX[j*w+i]*U[id+j*w+i].x+gradY[j*w+i]*U[id+j*w+i].y;
     }
   }
 }
@@ -142,24 +140,21 @@ __global__ void makeMatrix(float* mat, float* G)
 __global__ void gdSum(float* out, float* G, float* orig, float* def)
 {
   uint id = blockIdx.x*blockDim.x+threadIdx.x;
-  if(id >= WIDTH * HEIGHT)
-  {return;}
   //float diff = orig[id] - def[id];
   out[id] = (orig[id]-def[id])*G[id]/IMG_SIZE;
 }
 
-void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect)
+void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect, uint w, uint h)
 {
   for(uint p = 0; p < PARAMETERS; p++)
   {
-  gdSum<<<(IMG_SIZE+BLOCKSIZE-1)/BLOCKSIZE,min(IMG_SIZE,BLOCKSIZE)>>>(devTemp, devG+p*IMG_SIZE, devOut, devDef);
-  uint size;
+  uint size = w*h;
+  gdSum<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp, devG+p*size, devOut, devDef);
   uint blocksize;
-    size = WIDTH*HEIGHT;
     while(size>1)
     {
       blocksize = (size+2*BLOCKSIZE-1)/2/BLOCKSIZE;
-      reduce<<<blocksize,BLOCKSIZE>>>(devTemp,size);
+      reduce<<<blocksize,min(size,BLOCKSIZE)>>>(devTemp,size);
       size = blocksize;
     }
     cudaMemcpy(devVect+p,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);

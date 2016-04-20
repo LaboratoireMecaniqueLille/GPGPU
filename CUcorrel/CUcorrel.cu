@@ -14,9 +14,10 @@ int main(int argc, char** argv)
 {
 
   struct timeval t0, t1, t2; // Pour mesurer les durées d'exécution
+  cudaError_t err; // Pour récupérer les erreurs éventuelles
   size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
   size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
-  int nbIter=5; // Le nombre d'itérations
+  int nbIter=7; // Le nombre d'itérations
   char iAddr[10] = "img.csv"; // Le nom du fichier à ouvrir
   float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
   dim3 blocksize[LVL]; // Pour l'appel aux kernels sur toute l'image (une pour chaque étage)
@@ -36,7 +37,7 @@ int main(int argc, char** argv)
   float *devGradX; // Gradient de l'image d'origine par rapport à X
   float *devGradY; // .. à Y
   float2 *devFields[LVL]; // Contient les PARAMETERS champs de déplacements élémentaires à la suite dont on cherche l'influence par autant de paramètres
-  float *devG; // Les PARAMETERS matrices gradient*champ
+  float *devG[LVL]; // Les PARAMETERS matrices gradient*champ
   float *devParam; // Contient la valeur actuelle calculée des paramètres
   float *devDef[LVL]; // Image déformée à recaler (ici calculée à partir de l'image d'origine)
   float *devOut; // L'image interpolée à chaque itération
@@ -53,12 +54,13 @@ int main(int argc, char** argv)
   cudaMalloc(&devGradY,taille);
   div = 1;
   for(int i = 0; i < LVL; i++)
-  {cudaMalloc(&devFields[i],PARAMETERS*taille2/div);div*=4;}
-  cudaMalloc(&devG,PARAMETERS*taille);
+  {
+    cudaMalloc(&devFields[i],PARAMETERS*taille2/div);
+    cudaMalloc(&devG[i],PARAMETERS*taille/div);
+    cudaMalloc(&devDef[i],taille/div);
+    div*=4;
+  }
   cudaMalloc(&devParam,PARAMETERS*sizeof(float));
-  div = 1;
-  for(int i = 0; i < LVL; i++)
-  {cudaMalloc(&devDef[i],taille/div);div*=4;}
   cudaMalloc(&devOut,taille);
   cudaMalloc(&devMatrix,PARAMETERS*PARAMETERS*sizeof(float));
   cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(float));
@@ -113,14 +115,14 @@ int main(int argc, char** argv)
   cudaCreateTextureObject(&tex[i],&resDesc,&texDesc,NULL);
   div *= 2;
   }
-
+/*
   // --------- Calcul des gradients ---------
   gettimeofday(&t1,NULL);
   gradient<<<gridsize[0],blocksize[0]>>>(tex[0],devGradX,devGradY);
   cudaDeviceSynchronize();
   gettimeofday(&t2,NULL);
   cout << "\nCalcul des gradients: " << timeDiff(t1,t2) << " ms." << endl;
-
+*/
   //-------- [Facultatif] Affichage des gradients -------
   /*
   cout << "Gradient X:" << endl;
@@ -138,7 +140,13 @@ int main(int argc, char** argv)
 
   // --------- Calcul des matrices G ----------
   gettimeofday(&t1,NULL);
-  makeG<<<1,PARAMETERS>>>(devG,devFields[0],devGradX,devGradY);
+  div = 1;
+  for(int i = 0; i < LVL; i++)
+  {
+    gradient<<<gridsize[i],blocksize[i]>>>(tex[i],devGradX,devGradY);
+    makeG<<<1,PARAMETERS>>>(devG[i],devFields[i],devGradX,devGradY,WIDTH/div,HEIGHT/div);
+    div *= 2;
+  }
   cudaDeviceSynchronize();
   gettimeofday(&t2,NULL);
   cout << "Calcul des matrices G: " << timeDiff(t1,t2) << " ms." << endl;
@@ -200,7 +208,7 @@ int main(int argc, char** argv)
 
   // ---------- Calcul de la Hessienne ----------
   gettimeofday(&t1,NULL);
-  makeMatrix<<<1,tailleMat>>>(devMatrix,devG);
+  makeMatrix<<<1,tailleMat>>>(devMatrix,devG[0]);
   cudaDeviceSynchronize();
   gettimeofday(&t2, NULL);
   cout << "Génération de la matrice: " << timeDiff(t1,t2) << " ms." << endl;
@@ -239,56 +247,71 @@ int main(int argc, char** argv)
   
   // ---------- La boucle principale ---------
   //Note: seules les instructions marquées par //-- sont réellement nécessaires, les autres sont opour la débug/le timing
-  for(int i = 0;i < nbIter; i++)
+  div /= 2; // = 2^(LVL-1)
+  cout << "div=" << div << endl;
+  for(int l = LVL-1; l >= 0; l--)
   {
-    gettimeofday(&t0,NULL);
-    cout << "Boucle n°" << i+1 << endl;
-    cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
-    cout << "Paramètres calculés: ";
-    for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
-    cout << endl;
+    cout << " ###  Niveau n°" << l << " ###\n" << endl;
+    cout << " Taille de l'image: " << WIDTH/div << "x" << HEIGHT/div << endl;
+    for(int i = 0;i < nbIter; i++)
+    {
+      gettimeofday(&t0,NULL);
+      cout << "Boucle n°" << i+1 << endl;
+      cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
+      cout << "Paramètres calculés: ";
+      for(int j = 0; j < PARAMETERS;j++){cout << param[j] << ", ";}
+      cout << endl;
 
-    gettimeofday(&t1,NULL);
-    deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devOut, devFields[0], devParam,WIDTH,HEIGHT);//--
-    cudaDeviceSynchronize();
-    gettimeofday(&t2, NULL);
-    cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
+      gettimeofday(&t1,NULL);
+      deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div);//--
+      cudaDeviceSynchronize();
+      gettimeofday(&t2, NULL);
+      cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
 
-    gettimeofday(&t1,NULL);
-    gradientDescent(devG, devOut, devDef[0], devVec);//--
-    cudaDeviceSynchronize();
-    gettimeofday(&t2,NULL);
-    cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
+      gettimeofday(&t1,NULL);
+      gradientDescent(devG[l], devOut, devDef[l], devVec, WIDTH/div, HEIGHT/div);//--
+      cudaDeviceSynchronize();
 
-    cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
-    cout << "Gradient des paramètres:" << endl;
-    printMat(vec,PARAMETERS,1);
-    
-    gettimeofday(&t1,NULL);
-    myDot<<<1,PARAMETERS,PARAMETERS*sizeof(float)>>>(devInv,devVec,devVec);//--
-    ewMul<<<1,PARAMETERS>>>(devVec,devVecStep);//--
-    addVec<<<1,PARAMETERS>>>(devParam,devVec);//--
-    cudaDeviceSynchronize();
-    gettimeofday(&t2,NULL);
-    cout << "Mise à jour des valeurs: " << timeDiff(t1,t2) << " ms." << endl;
+      gettimeofday(&t2,NULL);
+      cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
 
-    cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
-    cout << "Direction:" << endl;
-    printMat(vec,PARAMETERS,1);
+      cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
+      cout << "Gradient des paramètres:" << endl;
+      printMat(vec,PARAMETERS,1);
+      
+      gettimeofday(&t1,NULL);
+      myDot<<<1,PARAMETERS,PARAMETERS*sizeof(float)>>>(devInv,devVec,devVec);//--
+      ewMul<<<1,PARAMETERS>>>(devVec,devVecStep);//--
+      addVec<<<1,PARAMETERS>>>(devParam,devVec);//--
+      cudaDeviceSynchronize();
+      gettimeofday(&t2,NULL);
+      cout << "Mise à jour des valeurs: " << timeDiff(t1,t2) << " ms." << endl;
 
-    gettimeofday(&t1, NULL);
-    oldres = res;//--
-    res = residuals(devOut, devDef[0], IMG_SIZE)/IMG_SIZE;//--
-    if(oldres - res < 0)//--
-    {cout << "Augmentation de la fonctionnelle !!" << endl;}//--
-    gettimeofday(&t2, NULL);
-    cout << "\nÉcart: "<< res << ", Calcul de l'écart: " << timeDiff(t1,t2) << "ms." << endl;
-    cout << "\nExécution de toute la boucle: " << timeDiff(t0,t2) << "ms.\n**********************\n\n\n" << endl;
+      cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
+      cout << "Direction:" << endl;
+      printMat(vec,PARAMETERS,1);
 
+      gettimeofday(&t1, NULL);
+      oldres = res;//--
+      res = residuals(devOut, devDef[l], IMG_SIZE/div/div)/IMG_SIZE*div*div;//--
+      if(oldres - res < 0)//--
+      {cout << "Augmentation de la fonctionnelle !!" << endl;}//--
+      gettimeofday(&t2, NULL);
+      cout << "\nÉcart: "<< res << ", Calcul de l'écart: " << timeDiff(t1,t2) << "ms." << endl;
+      cout << "\nExécution de toute la boucle: " << timeDiff(t0,t2) << "ms.\n**********************\n\n\n" << endl;
+
+      err = cudaGetLastError();
+      if(err != cudaSuccess)
+      {cout << "ERREUR !!\n" << cudaGetErrorName(err) << endl;exit(-1);}
+    }
+    div /= 2;
   }
 
+
+
+
+
   // ---------- Vérification d'erreur éventuelle ----------
-  cudaError_t err;
   err = cudaGetLastError();
   cout << "Cuda status: " << ((err == 0)?"OK.":"ERREUR !!") << endl;
   cout << err << endl;
@@ -302,12 +325,12 @@ int main(int argc, char** argv)
   cudaFree(devOrig);
   cudaFree(devGradX);
   cudaFree(devGradY);
-  cudaFree(devG);
   cudaFree(devParam);
   for(uint i = 0; i < LVL; i++)
   {
     cudaFree(devDef[i]);
     cudaFree(devFields[i]);
+    cudaFree(devG[i]);
   }
   cudaFree(devOut);
   cudaFree(devMatrix);
