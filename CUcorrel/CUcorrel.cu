@@ -35,7 +35,7 @@ int main(int argc, char** argv)
   float *devOrig; // Image originale
   float *devGradX; // Gradient de l'image d'origine par rapport à X
   float *devGradY; // .. à Y
-  float2 *devFields; // Contient les PARAMETERS champs de déplacements élémentaires à la suite dont on cherche l'influence par autant de paramètres
+  float2 *devFields[LVL]; // Contient les PARAMETERS champs de déplacements élémentaires à la suite dont on cherche l'influence par autant de paramètres
   float *devG; // Les PARAMETERS matrices gradient*champ
   float *devParam; // Contient la valeur actuelle calculée des paramètres
   float *devDef[LVL]; // Image déformée à recaler (ici calculée à partir de l'image d'origine)
@@ -51,11 +51,14 @@ int main(int argc, char** argv)
   cudaMalloc(&devOrig,taille);
   cudaMalloc(&devGradX,taille);
   cudaMalloc(&devGradY,taille);
-  cudaMalloc(&devFields,PARAMETERS*taille2);
+  div = 1;
+  for(int i = 0; i < LVL; i++)
+  {cudaMalloc(&devFields[i],PARAMETERS*taille2/div);div*=4;}
   cudaMalloc(&devG,PARAMETERS*taille);
   cudaMalloc(&devParam,PARAMETERS*sizeof(float));
-  for(int i = 1; i <= LVL; i++)
-  {cudaMalloc(&devDef[i-1],taille/i/i);}
+  div = 1;
+  for(int i = 0; i < LVL; i++)
+  {cudaMalloc(&devDef[i],taille/div);div*=4;}
   cudaMalloc(&devOut,taille);
   cudaMalloc(&devMatrix,PARAMETERS*PARAMETERS*sizeof(float));
   cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(float));
@@ -75,7 +78,7 @@ int main(int argc, char** argv)
   cout << "Image d'origine" << endl;
   printMat(orig,WIDTH,HEIGHT,256);
 
-  // ---------- Allocation de la bindless texture et copie des données ----------
+  // ---------- Allocation des bindless textures et copie des données ----------
   cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32,0,0,0,cudaChannelFormatKindFloat);
   cudaArray* cuArray[LVL];
   cudaMallocArray(&cuArray[0], &channelDesc,WIDTH,HEIGHT);
@@ -126,11 +129,19 @@ int main(int argc, char** argv)
   */
 
   // --------- Écriture des fields définis dans fields.cu ----------
-  writeFields(devFields,WIDTH,HEIGHT);
+  div = 1;
+  for(uint i = 0; i < LVL;i++)
+  {
+    writeFields(devFields[i],WIDTH/div,HEIGHT/div);
+    div *= 2;
+  }
+
+cout << "OK" << endl;
+
 
   // --------- Calcul des matrices G ----------
   gettimeofday(&t1,NULL);
-  makeG<<<1,PARAMETERS>>>(devG,devFields,devGradX,devGradY);
+  makeG<<<1,PARAMETERS>>>(devG,devFields[0],devGradX,devGradY);
   cudaDeviceSynchronize();
   gettimeofday(&t2,NULL);
   cout << "Calcul des matrices G: " << timeDiff(t1,t2) << " ms." << endl;
@@ -156,7 +167,7 @@ int main(int argc, char** argv)
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   // ---------- Calcul de l'image à recaler ----------
-  deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devDef[0],devFields,devParam,WIDTH,HEIGHT);
+  deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devDef[0],devFields[0],devParam,WIDTH,HEIGHT);
 
   // ---------- Bruitage de l'image déformée ---------
   for(int i = 0; i < WIDTH*HEIGHT ; i++)
@@ -237,7 +248,7 @@ int main(int argc, char** argv)
     cout << endl;
 
     gettimeofday(&t1,NULL);
-    deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devOut, devFields, devParam,WIDTH,HEIGHT);//--
+    deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devOut, devFields[0], devParam,WIDTH,HEIGHT);//--
     cudaDeviceSynchronize();
     gettimeofday(&t2, NULL);
     cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
@@ -290,11 +301,13 @@ int main(int argc, char** argv)
   cudaFree(devOrig);
   cudaFree(devGradX);
   cudaFree(devGradY);
-  cudaFree(devFields);
   cudaFree(devG);
   cudaFree(devParam);
   for(uint i = 0; i < LVL; i++)
-  {cudaFree(devDef[i]);}
+  {
+    cudaFree(devDef[i]);
+    cudaFree(devFields[i]);
+  }
   cudaFree(devOut);
   cudaFree(devMatrix);
   cudaFree(devInv);
