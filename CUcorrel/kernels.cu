@@ -207,3 +207,11 @@ void genMip(cudaTextureObject_t tex, cudaArray* array, uint w, uint h)
   mipKernel<<<gridsize,blocksize>>>(tex, devTemp, w, h);
   cudaMemcpyToArray(array,0,0,devTemp,w*h*sizeof(float),cudaMemcpyDeviceToDevice);
 }
+
+__global__ void resample(float* in, float* out, uint w)
+{
+  //à appeler avec les dimensions de la nouvelle image (cotés 2x plus petits), w est la largeur de la nouvelle image
+  uint x = blockDim.x*blockIdx.x+threadIdx.x;
+  uint y = blockDim.y*blockIdx.y+threadIdx.y;
+  out[x+y*w] = (in[2*x+4*w*y]+in[2*x+1+4*w*y]+in[2*x+2*w*(2*y+1)]+in[2*x+1+2*w*(2*y+1)])/4.f;
+}
