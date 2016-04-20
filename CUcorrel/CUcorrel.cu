@@ -136,9 +136,6 @@ int main(int argc, char** argv)
     div *= 2;
   }
 
-cout << "OK" << endl;
-
-
   // --------- Calcul des matrices G ----------
   gettimeofday(&t1,NULL);
   makeG<<<1,PARAMETERS>>>(devG,devFields[0],devGradX,devGradY);
@@ -178,12 +175,16 @@ cout << "OK" << endl;
   addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef[0],devOut);
 
   // ---------- Rééchantillonage de l'image pour les différents étages ----------
+  gettimeofday(&t1, NULL);
   div = 2;
   for(int i = 1; i < LVL; i++)
   {
     resample<<<gridsize[i],blocksize[i]>>>(devDef[i],devDef[i-1],WIDTH/div);
     div *= 2;
   }
+  cudaDeviceSynchronize();
+  gettimeofday(&t2, NULL);
+  cout << "Rééchantillonage de l'image déformée: " << timeDiff(t1,t2) << " ms." << endl;
 
   // ---------- [Facultatif] Affichage de l'image déformée ----------
   cudaMemcpy(orig,devDef[0],IMG_SIZE*sizeof(float),cudaMemcpyDeviceToHost);
