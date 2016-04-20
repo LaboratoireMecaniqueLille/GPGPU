@@ -137,11 +137,11 @@ __global__ void makeMatrix(float* mat, float* G)
   }
 }
 
-__global__ void gdSum(float* out, float* G, float* orig, float* def)
+__global__ void gdSum(float* out, float* G, float* orig, float* def, float norm)
 {
   uint id = blockIdx.x*blockDim.x+threadIdx.x;
   //float diff = orig[id] - def[id];
-  out[id] = (orig[id]-def[id])*G[id]/IMG_SIZE;
+  out[id] = (orig[id]-def[id])*G[id]/norm;
 }
 
 void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect, uint w, uint h)
@@ -149,11 +149,11 @@ void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect, 
   for(uint p = 0; p < PARAMETERS; p++)
   {
   uint size = w*h;
-  gdSum<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp, devG+p*size, devOut, devDef);
+  gdSum<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp, devG+p*size, devOut, devDef, w*h);
   uint blocksize;
     while(size>1)
     {
-      blocksize = (size+2*BLOCKSIZE-1)/2/BLOCKSIZE;
+      blocksize = (size+2*BLOCKSIZE-1)/(2*BLOCKSIZE);
       reduce<<<blocksize,min(size,BLOCKSIZE)>>>(devTemp,size);
       size = blocksize;
     }

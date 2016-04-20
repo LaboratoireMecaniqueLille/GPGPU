@@ -4,7 +4,7 @@ __global__ void reduce(float*, uint);
 __global__ void gradient(cudaTextureObject_t, float*, float*);
 __global__ void makeG(float*, float2*, float*, float*, uint, uint);
 __global__ void makeMatrix(float*, float*);
-__global__ void gdSum(float*, float*, float*, float*);
+__global__ void gdSum(float*, float*, float*, float*, float);
 __global__ void myDot(float*, float*, float*);
 __global__ void addVec(float*, float*);
 __global__ void ewMul(float*,float*);

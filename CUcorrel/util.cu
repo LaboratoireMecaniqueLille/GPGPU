@@ -90,16 +90,16 @@ void readFile(char* address, float* data, float norm)
   f.close();
 }
 
-void writeFile(char* address, float* data, float norm)
+void writeFile(char* address, float* data, float norm, uint w, uint h)
 {
   ofstream f;
   f.open(address);
   if(!f.is_open()){cout << "Erreur lors de l'ouverture du fichier" << endl;exit(-1);}
-  for(int j = 0;j < HEIGHT;j++)
+  for(int j = 0;j < h;j++)
   {
-    for(int i = 0; i < WIDTH;i++)
+    for(int i = 0; i < w;i++)
     {
-      f << 128+(int)(norm*data[i+j*WIDTH]) << ",";
+      f << (int)(norm*data[i+j*w]-1.f) << ",";
     }
     f << "\n";
   }

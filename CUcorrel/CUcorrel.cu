@@ -2,6 +2,7 @@
 #include <sys/time.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <stdio.h>
 
 #include "kernels.cuh"
 #include "CUcorrel.h"
@@ -115,22 +116,8 @@ int main(int argc, char** argv)
   cudaCreateTextureObject(&tex[i],&resDesc,&texDesc,NULL);
   div *= 2;
   }
-/*
-  // --------- Calcul des gradients ---------
-  gettimeofday(&t1,NULL);
-  gradient<<<gridsize[0],blocksize[0]>>>(tex[0],devGradX,devGradY);
-  cudaDeviceSynchronize();
-  gettimeofday(&t2,NULL);
-  cout << "\nCalcul des gradients: " << timeDiff(t1,t2) << " ms." << endl;
-*/
-  //-------- [Facultatif] Affichage des gradients -------
-  /*
-  cout << "Gradient X:" << endl;
-  cudaMemcpy(orig,devGradX,taille,cudaMemcpyDeviceToHost);
-  printMat(orig,WIDTH,HEIGHT,256);
-  */
 
-  // --------- Écriture des fields définis dans fields.cu ----------
+  // ---------- Écriture des fields définis dans fields.cu ----------
   div = 1;
   for(uint i = 0; i < LVL;i++)
   {
@@ -156,9 +143,9 @@ int main(int argc, char** argv)
   char oAddr[3];
   for(int i = 0;i < PARAMETERS;i++)
   {
-  cudaMemcpy(orig,devG+i*WIDTH*HEIGHT,taille,cudaMemcpyDeviceToHost);
+  cudaMemcpy(orig,devG[0]+i*WIDTH*HEIGHT,taille,cudaMemcpyDeviceToHost);
   sprintf(oAddr,"%d",i);
-  writeFile(oAddr, orig, 1);
+  writeFile(oAddr, orig, 1, WIDTH, HEIGHT);
   }
   */
   
@@ -199,6 +186,17 @@ int main(int argc, char** argv)
   cout << "Image déformée:\n" << endl;
   printMat(orig,WIDTH,HEIGHT,256);
 
+  // ---------- [Facultatif] ecriture en .csv des images déformées mippées ----------
+  div = 1;
+  char oAddr[15];
+  for(int i = 0; i < LVL; i++)
+  {
+    cudaMemcpy(orig,devDef[i],IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
+    sprintf(oAddr,"mip_%d.csv",i);
+    writeFile(oAddr, orig,1,WIDTH/div,HEIGHT/div);
+    div *= 2;
+  }
+
   // --------- [Facultatif] Écriture de l'image déformée en .csv pour la visualiser ----------
   /*
   char oAddr[10] = "out.csv";
@@ -238,7 +236,7 @@ int main(int argc, char** argv)
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   // ---------- Écriture du pas des paramètres ----------
-  float vecStep[PARAMETERS] = {2,2,2,2,2,2};
+  float vecStep[PARAMETERS] = {2.f,2.f,2.f,2.f,2.f,2.f};
   cudaMemcpy(devVecStep,vecStep,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   float res = 10000000000; // Le résidu (valeur hénaurme pour être sûr d'avoir une décroissante à la première itération)
@@ -263,6 +261,7 @@ int main(int argc, char** argv)
       cout << endl;
 
       gettimeofday(&t1,NULL);
+      cout << "grid:" << gridsize[l].x << "bloc: " << blocksize[l].x << endl;
       deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div);//--
       cudaDeviceSynchronize();
       gettimeofday(&t2, NULL);
@@ -282,6 +281,7 @@ int main(int argc, char** argv)
       gettimeofday(&t1,NULL);
       myDot<<<1,PARAMETERS,PARAMETERS*sizeof(float)>>>(devInv,devVec,devVec);//--
       ewMul<<<1,PARAMETERS>>>(devVec,devVecStep);//--
+      //if(l == 0)
       addVec<<<1,PARAMETERS>>>(devParam,devVec);//--
       cudaDeviceSynchronize();
       gettimeofday(&t2,NULL);
