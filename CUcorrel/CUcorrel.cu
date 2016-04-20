@@ -19,8 +19,17 @@ int main(int argc, char** argv)
   int nbIter=5; // Le nombre d'itérations
   char iAddr[10] = "img.csv"; // Le nom du fichier à ouvrir
   float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
-  dim3 blocksize(min(32,WIDTH),min(32,HEIGHT)); // Pour l'appel aux kernels sur toute l'image
-  dim3 gridsize((WIDTH+31)/32,(HEIGHT+31)/32); // ...
+  dim3 blocksize[LVL]; // Pour l'appel aux kernels sur toute l'image (une pour chaque étage)
+  dim3 gridsize[LVL];
+  uint div = 1; // Pour diviser la taille dans les boucles
+  for(int i = 0; i < LVL; i++)
+  {
+    blocksize[i].x = min(32,WIDTH/div);
+    blocksize[i].y = min(32,HEIGHT/div);
+    gridsize[i].x = (WIDTH/div+31)/32;
+    gridsize[i].y = (HEIGHT/div+31)/32;
+    div *= 2;
+  }
   dim3 tailleMat(PARAMETERS,PARAMETERS); // La taille de la hessienne
 
   float *devOrig; // Image originale
@@ -29,7 +38,7 @@ int main(int argc, char** argv)
   float2 *devFields; // Contient les PARAMETERS champs de déplacements élémentaires à la suite dont on cherche l'influence par autant de paramètres
   float *devG; // Les PARAMETERS matrices gradient*champ
   float *devParam; // Contient la valeur actuelle calculée des paramètres
-  float *devDef; // Image déformée à recaler (ici calculée à partir de l'image d'origine)
+  float *devDef[LVL]; // Image déformée à recaler (ici calculée à partir de l'image d'origine)
   float *devOut; // L'image interpolée à chaque itération
   float *devMatrix; // La hessienne utilisée pour la méthode de Newton
   float *devInv;  // L'inverse de la Hessienne
@@ -45,7 +54,8 @@ int main(int argc, char** argv)
   cudaMalloc(&devFields,PARAMETERS*taille2);
   cudaMalloc(&devG,PARAMETERS*taille);
   cudaMalloc(&devParam,PARAMETERS*sizeof(float));
-  cudaMalloc(&devDef,taille);
+  for(int i = 1; i <= LVL; i++)
+  {cudaMalloc(&devDef[i-1],taille/i/i);}
   cudaMalloc(&devOut,taille);
   cudaMalloc(&devMatrix,PARAMETERS*PARAMETERS*sizeof(float));
   cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(float));
@@ -60,7 +70,6 @@ int main(int argc, char** argv)
   // ---------- Lecture du fichier et écriture sur le device ---------
   readFile(iAddr,orig,256);
   cudaMemcpy(devOrig,orig,taille,cudaMemcpyHostToDevice);
-  cudaDeviceSynchronize();
 
   // ---------- [Facultatif] Affichage de l'image fixe ----------
   cout << "Image d'origine" << endl;
@@ -91,7 +100,7 @@ int main(int argc, char** argv)
   cudaTextureObject_t tex[LVL]={0};
   cudaCreateTextureObject(&tex[0],&resDesc,&texDesc,NULL);
 
-  uint div = 2;
+  div = 2;
   for(int i = 1; i < LVL; i++)
   {
   cudaMallocArray(&cuArray[i], &channelDesc,WIDTH/div,HEIGHT/div);
@@ -104,7 +113,7 @@ int main(int argc, char** argv)
 
   // --------- Calcul des gradients ---------
   gettimeofday(&t1,NULL);
-  gradient<<<gridsize,blocksize>>>(tex[0],devGradX,devGradY);
+  gradient<<<gridsize[0],blocksize[0]>>>(tex[0],devGradX,devGradY);
   cudaDeviceSynchronize();
   gettimeofday(&t2,NULL);
   cout << "\nCalcul des gradients: " << timeDiff(t1,t2) << " ms." << endl;
@@ -147,7 +156,7 @@ int main(int argc, char** argv)
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   // ---------- Calcul de l'image à recaler ----------
-  deform2D<<<gridsize,blocksize>>>(tex[0], devDef,devFields,devParam,WIDTH,HEIGHT);
+  deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devDef[0],devFields,devParam,WIDTH,HEIGHT);
 
   // ---------- Bruitage de l'image déformée ---------
   for(int i = 0; i < WIDTH*HEIGHT ; i++)
@@ -155,17 +164,25 @@ int main(int argc, char** argv)
     orig[i] = (float)rand()/RAND_MAX*4-2;
   }
   cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice);// Pour ajouter le bruit
-  addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef,devOut);
+  addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef[0],devOut);
+
+  // ---------- Rééchantillonage de l'image pour les différents étages ----------
+  div = 2;
+  for(int i = 1; i < LVL; i++)
+  {
+    resample<<<gridsize[i],blocksize[i]>>>(devDef[i],devDef[i-1],WIDTH/div);
+    div *= 2;
+  }
 
   // ---------- [Facultatif] Affichage de l'image déformée ----------
-  cudaMemcpy(orig,devDef,IMG_SIZE*sizeof(float),cudaMemcpyDeviceToHost);
+  cudaMemcpy(orig,devDef[0],IMG_SIZE*sizeof(float),cudaMemcpyDeviceToHost);
   cout << "Image déformée:\n" << endl;
   printMat(orig,WIDTH,HEIGHT,256);
 
   // --------- [Facultatif] Écriture de l'image déformée en .csv pour la visualiser ----------
   /*
   char oAddr[10] = "out.csv";
-  cudaMemcpy(orig,devDef,taille,cudaMemcpyDeviceToHost); // Pour récupérer l'image
+  cudaMemcpy(orig,devDef[0],taille,cudaMemcpyDeviceToHost); // Pour récupérer l'image
   writeFile(oAddr, orig, 256);
   */
 
@@ -220,13 +237,13 @@ int main(int argc, char** argv)
     cout << endl;
 
     gettimeofday(&t1,NULL);
-    deform2D<<<gridsize,blocksize>>>(tex[0], devOut, devFields, devParam,WIDTH,HEIGHT);//--
+    deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devOut, devFields, devParam,WIDTH,HEIGHT);//--
     cudaDeviceSynchronize();
     gettimeofday(&t2, NULL);
     cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
 
     gettimeofday(&t1,NULL);
-    gradientDescent(devG, devOut, devDef, devVec);//--
+    gradientDescent(devG, devOut, devDef[0], devVec);//--
     cudaDeviceSynchronize();
     gettimeofday(&t2,NULL);
     cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
@@ -249,7 +266,7 @@ int main(int argc, char** argv)
 
     gettimeofday(&t1, NULL);
     oldres = res;//--
-    res = residuals(devOut, devDef, IMG_SIZE)/IMG_SIZE;//--
+    res = residuals(devOut, devDef[0], IMG_SIZE)/IMG_SIZE;//--
     if(oldres - res < 0)//--
     {cout << "Augmentation de la fonctionnelle !!" << endl;}//--
     gettimeofday(&t2, NULL);
@@ -276,7 +293,8 @@ int main(int argc, char** argv)
   cudaFree(devFields);
   cudaFree(devG);
   cudaFree(devParam);
-  cudaFree(devDef);
+  for(uint i = 0; i < LVL; i++)
+  {cudaFree(devDef[i]);}
   cudaFree(devOut);
   cudaFree(devMatrix);
   cudaFree(devInv);
