@@ -5,26 +5,26 @@ float *devTemp;
 
 using namespace std;
 
-__global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam)
+__global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam, const uint w, const uint h)
 {
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
-  if(x < WIDTH && y < HEIGHT)
+  if(x < w && y < h)
   {
-    uint id = x+y*WIDTH;
+    uint id = x+y*w;
     float2 u;
     u.x = 0;
     u.y = 0;
     for(int i = 0; i < PARAMETERS; i++)
     {
-      u.x += devParam[i]*devU[i*IMG_SIZE+id].x;
-      u.y += devParam[i]*devU[i*IMG_SIZE+id].y;
+      u.x += devParam[i]*devU[i*w*h+id].x;
+      u.y += devParam[i]*devU[i*w*h+id].y;
     }
-    devOut[id] = tex2D<float>(tex,(x+.5f-u.x)/WIDTH,(y+.5f-u.y)/HEIGHT);
+    devOut[id] = tex2D<float>(tex,(x+.5f-u.x)/w,(y+.5f-u.y)/h);
   }
 }
 
-__global__ void lsq(float* out, float* devA, float* devB, int length)
+__global__ void lsq(float* out, float* devA, float* devB, const uint length)
 {
   uint id = blockDim.x*blockIdx.x+threadIdx.x;
   if(id > length)
@@ -32,7 +32,7 @@ __global__ void lsq(float* out, float* devA, float* devB, int length)
   out[id] = (devA[id]-devB[id])*(devA[id]-devB[id]);
 }
 
-__device__ void warpReduce(volatile float* sh_data, uint tid)
+__device__ void warpReduce(volatile float* sh_data, const uint tid)
 {
   sh_data[tid] += sh_data[tid+32];
   sh_data[tid] += sh_data[tid+16];
@@ -42,11 +42,11 @@ __device__ void warpReduce(volatile float* sh_data, uint tid)
   sh_data[tid] += sh_data[tid+1];
 }
 
-__global__ void reduce(float* data, uint size)
+__global__ void reduce(float* data, const uint size)
 {
-  //Réduit efficacement (ou pas) en sommant tout un tableau et en écrivant les somme restantes de chaque bloc au début du tableau (à appeler plusieurs fois pour sommer plus de 1024 éléments).
+  //Réduit relativement efficacement en sommant tout un tableau et en écrivant les somme restantes de chaque bloc au début du tableau (à appeler plusieurs fois pour sommer plus de 1024 éléments).
 /*
-TODO: Optimiser la façon dont le kernel somme les éléments (et rendre possible le cas size != 2^k)
+TODO: Rendre possible le cas size != 2^k
 voir le lien ci dessous:
 http://docs.nvidia.com/cuda/samples/6_Advanced/reduction/doc/reduction.pdf
 */
@@ -93,7 +93,7 @@ float residuals(float* devData1, float* devData2, uint size)
   return out;
 }
 
-void initCuda(float* data)
+void initCuda()
 {
   cudaMalloc(&devTemp,HEIGHT*WIDTH*sizeof(float));
 }
@@ -190,4 +190,28 @@ __global__ void ewMul(float* A, float* B)
 {
   int x = threadIdx.x;
   A[x] *= B[x];
+}
+
+__global__ void mipKernel(cudaTextureObject_t tex, float* out, const uint w, const uint h)
+{
+  uint x = blockIdx.x*blockDim.x+threadIdx.x;
+  uint y = blockIdx.y*blockDim.y+threadIdx.y;
+  out[x+w*y/2] = tex2D<float>(tex,(2*x+1)/w,(2*y+1)/h);
+}
+
+void genMip(cudaTextureObject_t tex, cudaArray* array, uint w, uint h)
+{
+  dim3 gridsize((w+31)/32,(h+31)/32);
+  dim3 blocksize(min(w,32),min(h,32));
+  //cout << "Génération du mipmap de taille " << w << ", " << h << endl;
+  mipKernel<<<gridsize,blocksize>>>(tex, devTemp, w, h);
+  cudaMemcpyToArray(array,0,0,devTemp,w*h*sizeof(float),cudaMemcpyDeviceToDevice);
+}
+
+__global__ void resample(float* in, float* out, uint w)
+{
+  //à appeler avec les dimensions de la nouvelle image (cotés 2x plus petits), w est la largeur de la nouvelle image
+  uint x = blockDim.x*blockIdx.x+threadIdx.x;
+  uint y = blockDim.y*blockIdx.y+threadIdx.y;
+  out[x+y*w] = (in[2*x+4*w*y]+in[2*x+1+4*w*y]+in[2*x+2*w*(2*y+1)]+in[2*x+1+2*w*(2*y+1)])/4.f;
 }

@@ -37,7 +37,7 @@ void printMat2D(float2* data,uint x,uint y, uint step)
 
 double timeDiff(struct timeval t1, struct timeval t2) //Retourne la différence en ms entre 2 mesures de temps avec gettimeofday(&t,NULL);
 {
-  return (t2.tv_sec-t1.tv_sec)*1000+1.*(t2.tv_usec-t1.tv_usec)/1000;
+  return (t2.tv_sec-t1.tv_sec)*1000+(t2.tv_usec-t1.tv_usec)/1000.f;
 }
 
 

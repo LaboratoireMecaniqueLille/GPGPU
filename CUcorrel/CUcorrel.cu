@@ -16,7 +16,7 @@ int main(int argc, char** argv)
   struct timeval t0, t1, t2; // Pour mesurer les durées d'exécution
   size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
   size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
-  int nbIter=20; // Le nombre d'itérations
+  int nbIter=5; // Le nombre d'itérations
   char iAddr[10] = "img.csv"; // Le nom du fichier à ouvrir
   float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
   dim3 blocksize(min(32,WIDTH),min(32,HEIGHT)); // Pour l'appel aux kernels sur toute l'image
@@ -51,6 +51,7 @@ int main(int argc, char** argv)
   cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(float));
   cudaMalloc(&devVec,PARAMETERS*sizeof(float));
   cudaMalloc(&devVecStep,PARAMETERS*sizeof(float));
+  initCuda();
   if(cudaGetLastError() == cudaErrorMemoryAllocation)
   {cout << "Erreur d'allocation (manque de mémoire graphique ?)" << endl;exit(-1);}
   else if(cudaGetLastError() != cudaSuccess)
@@ -67,16 +68,17 @@ int main(int argc, char** argv)
 
   // ---------- Allocation de la bindless texture et copie des données ----------
   cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32,0,0,0,cudaChannelFormatKindFloat);
-  cudaArray* cuArray2;
-  cudaMallocArray(&cuArray2, &channelDesc,WIDTH,HEIGHT);
+  cudaArray* cuArray[LVL];
+  cudaMallocArray(&cuArray[0], &channelDesc,WIDTH,HEIGHT);
+  cudaMemcpyToArray(cuArray[0],0,0,orig,IMG_SIZE*sizeof(float),cudaMemcpyHostToDevice);
 
   cudaResourceDesc resDesc;
   memset(&resDesc, 0, sizeof(resDesc));
   resDesc.resType = cudaResourceTypeArray;
-  resDesc.res.linear.devPtr = cuArray2;
   resDesc.res.linear.desc.f = cudaChannelFormatKindFloat;
   resDesc.res.linear.desc.x = 32;
   resDesc.res.linear.sizeInBytes = IMG_SIZE*sizeof(float);
+  resDesc.res.linear.devPtr = cuArray[0];
 
   cudaTextureDesc texDesc;
   memset(&texDesc, 0, sizeof(texDesc));
@@ -86,15 +88,23 @@ int main(int argc, char** argv)
   texDesc.filterMode = cudaFilterModeLinear;
   texDesc.normalizedCoords = 1;
 
-  cudaMemcpyToArray(cuArray2,0,0,orig,IMG_SIZE*sizeof(float),cudaMemcpyHostToDevice);
-  cudaTextureObject_t tex=0;
-  cudaCreateTextureObject(&tex,&resDesc,&texDesc,NULL);
+  cudaTextureObject_t tex[LVL]={0};
+  cudaCreateTextureObject(&tex[0],&resDesc,&texDesc,NULL);
 
+  uint div = 2;
+  for(int i = 1; i < LVL; i++)
+  {
+  cudaMallocArray(&cuArray[i], &channelDesc,WIDTH/div,HEIGHT/div);
+  resDesc.res.linear.sizeInBytes = IMG_SIZE/div/div*sizeof(float);
+  resDesc.res.linear.devPtr = cuArray[i];
+  genMip(tex[i-1],cuArray[i],HEIGHT/div,WIDTH/div);
+  cudaCreateTextureObject(&tex[i],&resDesc,&texDesc,NULL);
+  div *= 2;
+  }
 
-  // --------- Initialisation de la texture et calcul des gradients ---------
+  // --------- Calcul des gradients ---------
   gettimeofday(&t1,NULL);
-  initCuda(orig);
-  gradient<<<gridsize,blocksize>>>(tex,devGradX,devGradY);
+  gradient<<<gridsize,blocksize>>>(tex[0],devGradX,devGradY);
   cudaDeviceSynchronize();
   gettimeofday(&t2,NULL);
   cout << "\nCalcul des gradients: " << timeDiff(t1,t2) << " ms." << endl;
@@ -107,7 +117,7 @@ int main(int argc, char** argv)
   */
 
   // --------- Écriture des fields définis dans fields.cu ----------
-  writeFields(devFields);
+  writeFields(devFields,WIDTH,HEIGHT);
 
   // --------- Calcul des matrices G ----------
   gettimeofday(&t1,NULL);
@@ -129,13 +139,15 @@ int main(int argc, char** argv)
   
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
   float param[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3};
+  for(int i = 0; i < PARAMETERS; i++)
+  {param[i] = 6.f*rand()/RAND_MAX-3.f;}
   cout << "Paramètres réels: ";
   for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
   cout << endl;
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   // ---------- Calcul de l'image à recaler ----------
-  deform2D<<<gridsize,blocksize>>>(tex, devDef,devFields,devParam);
+  deform2D<<<gridsize,blocksize>>>(tex[0], devDef,devFields,devParam,WIDTH,HEIGHT);
 
   // ---------- Bruitage de l'image déformée ---------
   for(int i = 0; i < WIDTH*HEIGHT ; i++)
@@ -208,7 +220,7 @@ int main(int argc, char** argv)
     cout << endl;
 
     gettimeofday(&t1,NULL);
-    deform2D<<<gridsize,blocksize>>>(tex, devOut, devFields, devParam);//--
+    deform2D<<<gridsize,blocksize>>>(tex[0], devOut, devFields, devParam,WIDTH,HEIGHT);//--
     cudaDeviceSynchronize();
     gettimeofday(&t2, NULL);
     cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
