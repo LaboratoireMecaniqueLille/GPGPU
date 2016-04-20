@@ -152,7 +152,7 @@ int main(int argc, char** argv)
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
   float param[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3};
   for(int i = 0; i < PARAMETERS; i++)
-  {param[i] = 6.f*rand()/RAND_MAX-3.f;}
+  {param[i] = 4.f*rand()/RAND_MAX-2.f;}
   cout << "Paramètres réels: ";
   for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
   cout << endl;
@@ -164,7 +164,7 @@ int main(int argc, char** argv)
   // ---------- Bruitage de l'image déformée ---------
   for(int i = 0; i < WIDTH*HEIGHT ; i++)
   { 
-    orig[i] = (float)rand()/RAND_MAX*4-2;
+    orig[i] = (float)rand()/RAND_MAX*4.f-2.f;
   }
   cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice);// Pour ajouter le bruit
   addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef[0],devOut);
@@ -186,6 +186,7 @@ int main(int argc, char** argv)
   cout << "Image déformée:\n" << endl;
   printMat(orig,WIDTH,HEIGHT,256);
 
+/*
   // ---------- [Facultatif] ecriture en .csv des images déformées mippées ----------
   div = 1;
   char oAddr[15];
@@ -196,13 +197,7 @@ int main(int argc, char** argv)
     writeFile(oAddr, orig,1,WIDTH/div,HEIGHT/div);
     div *= 2;
   }
-
-  // --------- [Facultatif] Écriture de l'image déformée en .csv pour la visualiser ----------
-  /*
-  char oAddr[10] = "out.csv";
-  cudaMemcpy(orig,devDef[0],taille,cudaMemcpyDeviceToHost); // Pour récupérer l'image
-  writeFile(oAddr, orig, 256);
-  */
+*/
 
   // ---------- Calcul de la Hessienne ----------
   gettimeofday(&t1,NULL);
@@ -261,7 +256,6 @@ int main(int argc, char** argv)
       cout << endl;
 
       gettimeofday(&t1,NULL);
-      cout << "grid:" << gridsize[l].x << "bloc: " << blocksize[l].x << endl;
       deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div);//--
       cudaDeviceSynchronize();
       gettimeofday(&t2, NULL);
