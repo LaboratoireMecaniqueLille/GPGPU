@@ -49,7 +49,7 @@ int main(int argc, char** argv)
 
   srand(time(NULL)); // Seed pour générer le bruit avec rand()
 
-  // ---------- Allocation tous les tableaux du device ---------
+  // ---------- Allocation de tous les tableaux du device ---------
   cudaMalloc(&devOrig,taille);
   cudaMalloc(&devGradX,taille);
   cudaMalloc(&devGradY,taille);
@@ -241,11 +241,16 @@ int main(int argc, char** argv)
   // ---------- La boucle principale ---------
   //Note: seules les instructions marquées par //-- sont réellement nécessaires, les autres sont opour la débug/le timing
   div /= 2; // = 2^(LVL-1)
-  cout << "div=" << div << endl;
+  char oAddr[25];
   for(int l = LVL-1; l >= 0; l--)
   {
     cout << " ###  Niveau n°" << l << " ###\n" << endl;
     cout << " Taille de l'image: " << WIDTH/div << "x" << HEIGHT/div << endl;
+//*
+    cudaMemcpy(orig,devDef[l],IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
+    sprintf(oAddr,"devDef%d.csv",l);
+    writeFile(oAddr,orig,1,WIDTH/div,HEIGHT/div);
+//*/
     for(int i = 0;i < nbIter; i++)
     {
       gettimeofday(&t0,NULL);
@@ -260,6 +265,12 @@ int main(int argc, char** argv)
       cudaDeviceSynchronize();
       gettimeofday(&t2, NULL);
       cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
+
+//*
+      cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
+      sprintf(oAddr,"devOut%d-%d.csv",l,i);
+      writeFile(oAddr,orig,1,WIDTH/div,HEIGHT/div);
+//*/
 
       gettimeofday(&t1,NULL);
       gradientDescent(devG[l], devOut, devDef[l], devVec, WIDTH/div, HEIGHT/div);//--

@@ -1,5 +1,7 @@
 #include <iostream>
 #include "CUcorrel.h"
+#include "util.h"
+#include <stdio.h>
 
 float *devTemp;
 
@@ -191,7 +193,7 @@ __global__ void mipKernel(cudaTextureObject_t tex, float* out, const uint w, con
 {
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
-  out[x+w*y/2] = tex2D<float>(tex,(2*x+1)/w,(2*y+1)/h);
+  out[x+w*y] = tex2D<float>(tex,(2.f*x+1.f)/2.f/w,(2.f*y+1.f)/2.f/h);
 }
 
 void genMip(cudaTextureObject_t tex, cudaArray* array, uint w, uint h)
@@ -201,6 +203,12 @@ void genMip(cudaTextureObject_t tex, cudaArray* array, uint w, uint h)
   //cout << "Génération du mipmap de taille " << w << ", " << h << endl;
   mipKernel<<<gridsize,blocksize>>>(tex, devTemp, w, h);
   cudaMemcpyToArray(array,0,0,devTemp,w*h*sizeof(float),cudaMemcpyDeviceToDevice);
+  float* test = (float*)malloc(w*h*sizeof(float));
+  cudaMemcpy(test,devTemp,w*h*sizeof(float),cudaMemcpyDeviceToHost);
+  char oAddr[20];
+  sprintf(oAddr,"mip%d.csv",w);
+  writeFile(oAddr,test,1,w,h);
+  free(test);
 }
 
 __global__ void resample(float* out, float* in, uint w)
