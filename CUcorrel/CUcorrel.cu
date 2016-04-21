@@ -317,7 +317,7 @@ int main(int argc, char** argv)
       if(oldres - res < 0)//--
       {cout << "Augmentation de la fonctionnelle !!" << endl;}//--
       gettimeofday(&t2, NULL);
-      cout << "\nÉcart: "<< res << ", Calcul de l'écart: " << timeDiff(t1,t2) << "ms." << endl;
+      cout << "\nRésidu: "<< res << ", Calcul: " << timeDiff(t1,t2) << "ms." << endl;
       cout << "\nExécution de toute la boucle: " << timeDiff(t0,t2) << "ms.\n**********************\n\n\n" << endl;
 
       err = cudaGetLastError();
