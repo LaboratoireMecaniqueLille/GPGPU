@@ -142,6 +142,7 @@ void checkError(cusolverStatus_t cuSolverStatus)
         cout << "Unknown error: " << cuSolverStatus;
     }
     cout << endl;
+    exit(-1);
 
   }
 }
