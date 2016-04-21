@@ -18,7 +18,7 @@ int main(int argc, char** argv)
   cudaError_t err; // Pour récupérer les erreurs éventuelles
   size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
   size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
-  int nbIter=3; // Le nombre d'itérations
+  int nbIter=7; // Le nombre d'itérations
   char iAddr[10] = "img.csv"; // Le nom du fichier à ouvrir
   float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
   dim3 blocksize[LVL]; // Pour l'appel aux kernels sur toute l'image (une pour chaque étage)
@@ -109,12 +109,12 @@ int main(int argc, char** argv)
   div = 2;
   for(int i = 1; i < LVL; i++)
   {
-  cudaMallocArray(&cuArray[i], &channelDesc,WIDTH/div,HEIGHT/div);
-  resDesc.res.linear.sizeInBytes = IMG_SIZE/div/div*sizeof(float);
-  resDesc.res.linear.devPtr = cuArray[i];
-  genMip(tex[i-1],cuArray[i],HEIGHT/div,WIDTH/div);
-  cudaCreateTextureObject(&tex[i],&resDesc,&texDesc,NULL);
-  div *= 2;
+    cudaMallocArray(&cuArray[i], &channelDesc,WIDTH/div,HEIGHT/div);
+    resDesc.res.linear.sizeInBytes = IMG_SIZE/div/div*sizeof(float);
+    resDesc.res.linear.devPtr = cuArray[i];
+    genMip(tex[i-1],cuArray[i],HEIGHT/div,WIDTH/div);
+    cudaCreateTextureObject(&tex[i],&resDesc,&texDesc,NULL);
+    div *= 2;
   }
 
   // ---------- Écriture des fields définis dans fields.cu ----------
@@ -139,7 +139,7 @@ int main(int argc, char** argv)
   cout << "Calcul des matrices G: " << timeDiff(t1,t2) << " ms." << endl;
 
   // ------- [Facultatif] Écriture des G en .csv pour les visualiser -----------
-  //*
+  /*
   char oAddr[25];
   div = 1;
   for(int l = 0; l < LVL; l++)
@@ -152,12 +152,12 @@ int main(int argc, char** argv)
     }
     div *= 2;
   }
-  //*/
+  */
   
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
   float paramI[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3};
   for(int i = 0; i < PARAMETERS; i++)
-  {paramI[i] = 10.f*rand()/RAND_MAX-5.f;}
+  {paramI[i] = 12.f*rand()/RAND_MAX-6.f;}
   float param[PARAMETERS];
   cout << "Paramètres réels: ";
   for(int i = 0; i < PARAMETERS;i++){cout << paramI[i] << ", ";}
@@ -272,7 +272,7 @@ int main(int argc, char** argv)
       for(int j = 0; j < PARAMETERS;j++){cout << param[j] << ", ";}
       cout << endl;
       cout << "Différence: ";
-      for(int j = 0; j < PARAMETERS;j++){cout << paramI[j]-param[j] << ", ";}
+      for(int j = 0; j < PARAMETERS;j++){cout << param[j]-paramI[j] << ", ";}
       cout << endl;
 
 

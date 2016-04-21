@@ -38,8 +38,8 @@ void writeFields(float2* devFields, uint w, uint h)
   {
     for(int j = 0; j < h; j++)
     {
-      field[i+w*j].x = 1.4142135624f*(j-h/2.)/h; // Rotation
-      field[i+w*j].y = 1.4142135624f*(w/2.-i)/w;
+      field[i+w*j].x = 1.4142135624f*(j-h/2.f)/h; // Rotation
+      field[i+w*j].y = 1.4142135624f*(w/2.f-i)/w;
     }
   }
   //printMat2D(field,w,h,w/16);
@@ -69,8 +69,8 @@ void writeFields(float2* devFields, uint w, uint h)
   {
     for(int j = 0; j < h; j++)
     {
-      field[i+w*j].x = 1.4142135624f*(j/h-.5f); // Shear
-      field[i+w*j].y = 1.4142135624f*(i/w-.5f); 
+      field[i+w*j].x = 1.4142135624f*((float)j/h-.5f); // Shear
+      field[i+w*j].y = 1.4142135624f*((float)i/w-.5f); 
     }
   }
   //printMat2D(field,w,h,w/16);

@@ -76,8 +76,8 @@ __global__ void gradient(cudaTextureObject_t tex, float* gradX, float* gradY, ui
   //Utilise l'algo le plus simple: les différences centrées.
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
-  gradX[x+y*w]=tex2D<float>(tex,(x+1.f)/w,(y+.5f)/h)-tex2D<float>(tex,(float)x/w,(y+.5f)/h);
-  gradY[x+y*w]=tex2D<float>(tex,(x+.5f)/w,(y+1.f)/h)-tex2D<float>(tex,(x+.5f)/w,(float)y/HEIGHT);
+  gradX[x+y*w]=(tex2D<float>(tex,(x+1.f)/w,(y+.5f)/h)-tex2D<float>(tex,(float)x/w,(y+.5f)/h))*w/WIDTH;
+  gradY[x+y*w]=(tex2D<float>(tex,(x+.5f)/w,(y+1.f)/h)-tex2D<float>(tex,(x+.5f)/w,(float)y/h))*h/HEIGHT;
 }
 
 float residuals(float* devData1, float* devData2, uint size)
