@@ -18,7 +18,7 @@ int main(int argc, char** argv)
   cudaError_t err; // Pour récupérer les erreurs éventuelles
   size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
   size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
-  int nbIter=7; // Le nombre d'itérations
+  int nbIter=3; // Le nombre d'itérations
   char iAddr[10] = "img.csv"; // Le nom du fichier à ouvrir
   float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
   dim3 blocksize[LVL]; // Pour l'appel aux kernels sur toute l'image (une pour chaque étage)
@@ -130,7 +130,7 @@ int main(int argc, char** argv)
   div = 1;
   for(int i = 0; i < LVL; i++)
   {
-    gradient<<<gridsize[i],blocksize[i]>>>(tex[i],devGradX,devGradY);
+    gradient<<<gridsize[i],blocksize[i]>>>(tex[i],devGradX,devGradY, WIDTH/div, HEIGHT/div);
     makeG<<<1,PARAMETERS>>>(devG[i],devFields[i],devGradX,devGradY,WIDTH/div,HEIGHT/div);
     div *= 2;
   }
@@ -139,24 +139,30 @@ int main(int argc, char** argv)
   cout << "Calcul des matrices G: " << timeDiff(t1,t2) << " ms." << endl;
 
   // ------- [Facultatif] Écriture des G en .csv pour les visualiser -----------
-  /*
-  char oAddr[3];
-  for(int i = 0;i < PARAMETERS;i++)
+  //*
+  char oAddr[25];
+  div = 1;
+  for(int l = 0; l < LVL; l++)
   {
-  cudaMemcpy(orig,devG[0]+i*WIDTH*HEIGHT,taille,cudaMemcpyDeviceToHost);
-  sprintf(oAddr,"%d",i);
-  writeFile(oAddr, orig, 1, WIDTH, HEIGHT);
+    for(int i = 0;i < PARAMETERS;i++)
+    {
+    cudaMemcpy(orig,devG[l]+i*WIDTH*HEIGHT/div/div,taille/div/div,cudaMemcpyDeviceToHost);
+    sprintf(oAddr,"G%d-%d.csv",l,i);
+    writeFile(oAddr, orig, 2, 128, WIDTH/div, HEIGHT/div);
+    }
+    div *= 2;
   }
-  */
+  //*/
   
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
-  float param[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3};
+  float paramI[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3};
   for(int i = 0; i < PARAMETERS; i++)
-  {param[i] = 4.f*rand()/RAND_MAX-2.f;}
+  {paramI[i] = 10.f*rand()/RAND_MAX-5.f;}
+  float param[PARAMETERS];
   cout << "Paramètres réels: ";
-  for(int i = 0; i < PARAMETERS;i++){cout << param[i] << ", ";}
+  for(int i = 0; i < PARAMETERS;i++){cout << paramI[i] << ", ";}
   cout << endl;
-  cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
+  cudaMemcpy(devParam, paramI, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   // ---------- Calcul de l'image à recaler ----------
   deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devDef[0],devFields[0],devParam,WIDTH,HEIGHT);
@@ -194,7 +200,7 @@ int main(int argc, char** argv)
   {
     cudaMemcpy(orig,devDef[i],IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
     sprintf(oAddr,"mip_%d.csv",i);
-    writeFile(oAddr, orig,1,WIDTH/div,HEIGHT/div);
+    writeFile(oAddr, orig, 1, 0, WIDTH/div,HEIGHT/div);
     div *= 2;
   }
 */
@@ -231,47 +237,56 @@ int main(int argc, char** argv)
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
   // ---------- Écriture du pas des paramètres ----------
-  float vecStep[PARAMETERS] = {2.f,2.f,2.f,2.f,2.f,2.f};
+  //float vecStep[PARAMETERS] = {2.f,2.f,2.f,2.f,2.f,2.f};
+  float vecStep[PARAMETERS] = {1.f,1.f,1.f,1.f,1.f,1.f};
   cudaMemcpy(devVecStep,vecStep,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
-  float res = 10000000000; // Le résidu (valeur hénaurme pour être sûr d'avoir une décroissante à la première itération)
+  float res; // Le résidu 
   float oldres; // Pour stocker le résidu de l'itération précédente et comparer
   float vec[PARAMETERS]; // Pour stocker sur l'hôte les paramètres calculés
   
   // ---------- La boucle principale ---------
   //Note: seules les instructions marquées par //-- sont réellement nécessaires, les autres sont opour la débug/le timing
   div /= 2; // = 2^(LVL-1)
-  char oAddr[25];
+  //char oAddr[25];
   for(int l = LVL-1; l >= 0; l--)
   {
     cout << " ###  Niveau n°" << l << " ###\n" << endl;
     cout << " Taille de l'image: " << WIDTH/div << "x" << HEIGHT/div << endl;
-//*
+/*
+    // ---------- [Facultatif] Pour enregistrer en .csv le devDef de chaque étaage ---------
     cudaMemcpy(orig,devDef[l],IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
     sprintf(oAddr,"devDef%d.csv",l);
-    writeFile(oAddr,orig,1,WIDTH/div,HEIGHT/div);
-//*/
+    writeFile(oAddr,orig,1, 0, WIDTH/div,HEIGHT/div);
+*/
+    res = 10000000000;// On remet une valeur hénaurme pour être sûr d'avoir une décroissante à la première itération
     for(int i = 0;i < nbIter; i++)
     {
       gettimeofday(&t0,NULL);
       cout << "Boucle n°" << i+1 << endl;
       cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
+      cout << "Paramètres réels: ";
+      for(int j = 0; j < PARAMETERS;j++){cout << paramI[j] << ", ";}
+      cout << endl;
       cout << "Paramètres calculés: ";
       for(int j = 0; j < PARAMETERS;j++){cout << param[j] << ", ";}
       cout << endl;
+      cout << "Différence: ";
+      for(int j = 0; j < PARAMETERS;j++){cout << paramI[j]-param[j] << ", ";}
+      cout << endl;
+
 
       gettimeofday(&t1,NULL);
       deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div);//--
       cudaDeviceSynchronize();
       gettimeofday(&t2, NULL);
       cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
-
-//*
+/*
+      // --------- [Facultatif] Pour enregistrer en .csv l'image à chaque itération ----------
       cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
-      sprintf(oAddr,"devOut%d-%d.csv",l,i);
-      writeFile(oAddr,orig,1,WIDTH/div,HEIGHT/div);
-//*/
-
+      sprintf(oAddr,"devOut%d-%d.csv",LVL-l,i);
+      writeFile(oAddr,orig,1,0, WIDTH/div,HEIGHT/div);
+*/
       gettimeofday(&t1,NULL);
       gradientDescent(devG[l], devOut, devDef[l], devVec, WIDTH/div, HEIGHT/div);//--
       cudaDeviceSynchronize();

@@ -90,7 +90,7 @@ void readFile(char* address, float* data, float norm)
   f.close();
 }
 
-void writeFile(char* address, float* data, float norm, uint w, uint h)
+void writeFile(char* address, float* data, float norm, int offset, uint w, uint h)
 {
   ofstream f;
   f.open(address);
@@ -99,7 +99,7 @@ void writeFile(char* address, float* data, float norm, uint w, uint h)
   {
     for(int i = 0; i < w;i++)
     {
-      f << (int)(norm*data[i+j*w]-1.f) << ",";
+      f << (int)(norm*data[i+j*w]-1.f)+offset << ",";
     }
     f << "\n";
   }

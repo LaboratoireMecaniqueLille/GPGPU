@@ -6,5 +6,5 @@ float GPUsum(float*, unsigned int);
 void readParam(char**,float*, int=7);
 void getValues(std::string, double*, int);
 void readFile(char*, float*, float);
-void writeFile(char*, float*, float, uint, uint);
+void writeFile(char*, float*, float, int, uint, uint);
 void invert(float*,float*);

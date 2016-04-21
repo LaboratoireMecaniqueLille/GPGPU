@@ -71,13 +71,13 @@ http://docs.nvidia.com/cuda/samples/6_Advanced/reduction/doc/reduction.pdf
   {data[blockIdx.x] = array[0];} // Le thread de tête écrit le résultat de son bloc dans le tableau
 }
 
-__global__ void gradient(cudaTextureObject_t tex, float* gradX, float* gradY)
+__global__ void gradient(cudaTextureObject_t tex, float* gradX, float* gradY, uint w, uint h)
 {
   //Utilise l'algo le plus simple: les différences centrées.
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
-  gradX[x+y*WIDTH]=tex2D<float>(tex,(x+1.f)/WIDTH,(y+.5f)/HEIGHT)-tex2D<float>(tex,(float)x/WIDTH,(y+.5f)/HEIGHT);
-  gradY[x+y*WIDTH]=tex2D<float>(tex,(x+.5f)/WIDTH,(y+1.f)/HEIGHT)-tex2D<float>(tex,(x+.5f)/WIDTH,(float)y/HEIGHT);
+  gradX[x+y*w]=tex2D<float>(tex,(x+1.f)/w,(y+.5f)/h)-tex2D<float>(tex,(float)x/w,(y+.5f)/h);
+  gradY[x+y*w]=tex2D<float>(tex,(x+.5f)/w,(y+1.f)/h)-tex2D<float>(tex,(x+.5f)/w,(float)y/HEIGHT);
 }
 
 float residuals(float* devData1, float* devData2, uint size)
@@ -203,12 +203,14 @@ void genMip(cudaTextureObject_t tex, cudaArray* array, uint w, uint h)
   //cout << "Génération du mipmap de taille " << w << ", " << h << endl;
   mipKernel<<<gridsize,blocksize>>>(tex, devTemp, w, h);
   cudaMemcpyToArray(array,0,0,devTemp,w*h*sizeof(float),cudaMemcpyDeviceToDevice);
+  /* Vérif:
   float* test = (float*)malloc(w*h*sizeof(float));
   cudaMemcpy(test,devTemp,w*h*sizeof(float),cudaMemcpyDeviceToHost);
   char oAddr[20];
   sprintf(oAddr,"mip%d.csv",w);
-  writeFile(oAddr,test,1,w,h);
+  writeFile(oAddr,test,1,0,w,h);
   free(test);
+  */
 }
 
 __global__ void resample(float* out, float* in, uint w)
