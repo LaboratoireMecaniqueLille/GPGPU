@@ -18,7 +18,7 @@ int main(int argc, char** argv)
   cudaError_t err; // Pour récupérer les erreurs éventuelles
   size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
   size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
-  int nbIter=7; // Le nombre d'itérations
+  int nbIter=60; // Le nombre d'itérations
   char iAddr[10] = "img.csv"; // Le nom du fichier à ouvrir
   float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
   dim3 blocksize[LVL]; // Pour l'appel aux kernels sur toute l'image (une pour chaque étage)
@@ -47,6 +47,7 @@ int main(int argc, char** argv)
   float *devInv;  // L'inverse de la Hessienne
   float *devVec; // Vecteur pour stocker les PARAMETERS valeurs du gradient à chaque itération
   float *devVecStep; // Multiplie terme à terme la direction avant le l'ajouter aux paramètres
+  float *devVecOld; // Pour stocker le vecteur précédent et le restaurer si nécessaire
 
   srand(time(NULL)); // Seed pour générer le bruit avec rand()
 
@@ -68,6 +69,7 @@ int main(int argc, char** argv)
   cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(float));
   cudaMalloc(&devVec,PARAMETERS*sizeof(float));
   cudaMalloc(&devVecStep,PARAMETERS*sizeof(float));
+  cudaMalloc(&devVecOld,PARAMETERS*sizeof(float));
   initCuda();
   if(cudaGetLastError() == cudaErrorMemoryAllocation)
   {cout << "Erreur d'allocation (manque de mémoire graphique ?)" << endl;exit(-1);}
@@ -157,7 +159,9 @@ int main(int argc, char** argv)
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
   float paramI[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3};
   for(int i = 0; i < PARAMETERS; i++)
-  {paramI[i] = 20.f*rand()/RAND_MAX-10.f;}
+  //paramI[i] = 80.f*rand()/RAND_MAX-40.f;
+  paramI[i] = 40.f*rand()/RAND_MAX-20.f;
+  //paramI[i] = 20.f*rand()/RAND_MAX-10.f;
   float param[PARAMETERS];
   cout << "Paramètres réels: ";
   for(int i = 0; i < PARAMETERS;i++){cout << paramI[i] << ", ";}
@@ -231,7 +235,8 @@ int main(int argc, char** argv)
 
   // ---------- Écriture des paramètres initiaux ----------
   for(int i = 0; i < PARAMETERS; i++)
-  {param[i] = 0;}
+  param[i] = 0;
+  //param[i] = paramI[i];
   //readParam(argv,param); // Pour tester des valeurs de paramètres par défaut sans recompiler
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
@@ -247,6 +252,8 @@ int main(int argc, char** argv)
   // ---------- La boucle principale ---------
   //Note: seules les instructions marquées par //-- sont réellement nécessaires, les autres sont opour la débug/le timing
   div /= 2; // = 2^(LVL-1)
+  float step = 5.f;
+  res = 10000000000;// On remet une valeur hénaurme pour être sûr d'avoir une décroissante à la première itération
   for(int l = LVL-1; l >= 0; l--)
   {
     cout << " ###  Niveau n°" << l << " ###\n" << endl;
@@ -257,8 +264,8 @@ int main(int argc, char** argv)
     sprintf(oAddr,"devDef%d.csv",l);
     writeFile(oAddr,orig,1, 0, WIDTH/div,HEIGHT/div);
 */
-    res = 10000000000;// On remet une valeur hénaurme pour être sûr d'avoir une décroissante à la première itération
-    float step = 5.f;
+    //res = 10000000000;// On remet une valeur hénaurme pour être sûr d'avoir une décroissante à la première itération
+    step = 1.f;
     for(int i = 0;i < nbIter; i++)
     {
       gettimeofday(&t0,NULL);
@@ -298,10 +305,11 @@ int main(int argc, char** argv)
       printMat(vec,PARAMETERS,1);
       
       gettimeofday(&t1,NULL);
+      vecCpy<<<1,PARAMETERS>>>(devVecOld,devVec);
       myDot<<<1,PARAMETERS,PARAMETERS*sizeof(float)>>>(devInv,devVec,devVec);//--
       //ewMul<<<1,PARAMETERS>>>(devVec,devVecStep);//--
       //scalMul<<<1,PARAMETERS>>>(devVec,2.f*(l+1));
-      scalMul<<<1,PARAMETERS>>>(devVec,step);
+      scalMul<<<1,PARAMETERS>>>(devVec,2.f*(l+1));
       addVec<<<1,PARAMETERS>>>(devParam,devVec);//--
       cudaDeviceSynchronize();
       gettimeofday(&t2,NULL);
@@ -314,11 +322,6 @@ int main(int argc, char** argv)
       gettimeofday(&t1, NULL);
       oldres = res;//--
       res = residuals(devOut, devDef[l], IMG_SIZE/div/div)/IMG_SIZE*div*div;//--
-      if(oldres - res < 0)//--
-      {cout << "Augmentation de la fonctionnelle !!" << endl;step/=2.f;}//--
-      else
-      step *= 1.1f;
-      cout << "step: " << step << endl;
       gettimeofday(&t2, NULL);
       cout << "\nRésidu: "<< res << ", Calcul: " << timeDiff(t1,t2) << "ms." << endl;
       cout << "\nExécution de toute la boucle: " << timeDiff(t0,t2) << "ms.\n**********************\n\n\n" << endl;
@@ -326,6 +329,11 @@ int main(int argc, char** argv)
       err = cudaGetLastError();
       if(err != cudaSuccess)
       {cout << "ERREUR !!\n" << cudaGetErrorName(err) << endl;exit(-1);}
+      if(oldres - res < 0)//--
+      {
+        cout << "Augmentation de la fonctionnelle !!" << endl;
+        break;
+      }//--
     }
     div /= 2;
   }
@@ -356,6 +364,7 @@ int main(int argc, char** argv)
   cudaFree(devInv);
   cudaFree(devVec);
   cudaFree(devVecStep);
+  cudaFree(devVecOld);
 
   // ---------- Libération des arrays de l'hôte ----------
   free(orig);

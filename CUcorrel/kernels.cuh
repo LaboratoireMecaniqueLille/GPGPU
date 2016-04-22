@@ -10,6 +10,7 @@ __global__ void addVec(float*, float*);
 __global__ void ewMul(float*,float*);
 __global__ void resample(float*, float*, uint);
 __global__ void scalMul(float*, float);
+__global__ void vecCpy(float*, float*);
 float residuals(float*, float*, uint);
 void initCuda();
 void genMip(cudaTextureObject_t, cudaArray*, uint, uint);

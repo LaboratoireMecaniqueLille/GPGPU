@@ -76,8 +76,8 @@ __global__ void gradient(cudaTextureObject_t tex, float* gradX, float* gradY, ui
   //Utilise l'algo le plus simple: les différences centrées.
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
-  gradX[x+y*w]=(tex2D<float>(tex,(x+1.f)/w,(y+.5f)/h)-tex2D<float>(tex,(float)x/w,(y+.5f)/h))*w/WIDTH;
-  gradY[x+y*w]=(tex2D<float>(tex,(x+.5f)/w,(y+1.f)/h)-tex2D<float>(tex,(x+.5f)/w,(float)y/h))*h/HEIGHT;
+  gradX[x+y*w]=(tex2D<float>(tex,(x+1.f)/w,(y+.5f)/h)-tex2D<float>(tex,(float)x/w,(y+.5f)/h));//*w/WIDTH;
+  gradY[x+y*w]=(tex2D<float>(tex,(x+.5f)/w,(y+1.f)/h)-tex2D<float>(tex,(x+.5f)/w,(float)y/h));//*h/HEIGHT;
 }
 
 float residuals(float* devData1, float* devData2, uint size)
@@ -225,4 +225,10 @@ __global__ void scalMul(float* vec, float scal)
 {
   uint x = threadIdx.x;
   vec[x] *= scal;
+}
+
+__global__ void vecCpy(float* dest, float* source)
+{
+  uint id = threadIdx.x;
+  dest[id] = source[id];
 }
