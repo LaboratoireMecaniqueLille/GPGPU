@@ -220,3 +220,9 @@ __global__ void resample(float* out, float* in, uint w)
   uint y = blockDim.y*blockIdx.y+threadIdx.y;
   out[x+y*w] = (in[2*x+4*w*y]+in[2*x+1+4*w*y]+in[2*x+2*w*(2*y+1)]+in[2*x+1+2*w*(2*y+1)])/4.f;
 }
+
+__global__ void scalMul(float* vec, float scal)
+{
+  uint x = threadIdx.x;
+  vec[x] *= scal;
+}
