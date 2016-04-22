@@ -13,22 +13,24 @@ void writeFields(float2* devFields, uint w, uint h)
   size_t taille2 = w*h*sizeof(float2);
   float2 *field = (float2*)malloc(taille2);
 
+  float valW = (float)w/WIDTH;
   for(int i = 0; i < w; i++)
   {
     for(int j = 0; j < h; j++)
     {
-      field[i+w*j].x = 1.f; // Move X
+      field[i+w*j].x = valW; // Move X
       field[i+w*j].y = 0.f;
     }
   }
   //printMat2D(field,w,h,w/16);
   cudaMemcpy(devFields,field,taille2,cudaMemcpyHostToDevice);
+  float valH = (float)h/HEIGHT;
   for(int i = 0; i < w; i++)
   {
     for(int j = 0; j < h; j++)
     {
       field[i+w*j].x = 0.f; // Move Y
-      field[i+w*j].y = 1.f;
+      field[i+w*j].y = valH;
     }
   }
   //printMat2D(field,w,h,w/16);
@@ -38,8 +40,8 @@ void writeFields(float2* devFields, uint w, uint h)
   {
     for(int j = 0; j < h; j++)
     {
-      field[i+w*j].x = 1.4142135624f*(j-h/2.f)/h; // Rotation
-      field[i+w*j].y = 1.4142135624f*(w/2.f-i)/w;
+      field[i+w*j].x = 1.4142135624f*(j-h/2.f)/HEIGHT; // Rotation
+      field[i+w*j].y = 1.4142135624f*(w/2.f-i)/WIDTH;
     }
   }
   //printMat2D(field,w,h,w/16);
@@ -48,7 +50,7 @@ void writeFields(float2* devFields, uint w, uint h)
   {
     for(int j = 0; j < h; j++)
     {
-      field[i+w*j].x = 2.f*i/w-1.f; // Stretch X
+      field[i+w*j].x = (2.f*i-(float)w)/WIDTH; // Stretch X
       field[i+w*j].y = 0.f;
     }
   }
@@ -59,7 +61,7 @@ void writeFields(float2* devFields, uint w, uint h)
     for(int j = 0; j < h; j++)
     {
       field[i+w*j].x = 0.f; // Stretch Y
-      field[i+w*j].y = 2.f*j/h-1.f;
+      field[i+w*j].y = (2.f*j-(float)h)/HEIGHT;
     }
   }
   //printMat2D(field,w,h,w/16);
@@ -69,8 +71,8 @@ void writeFields(float2* devFields, uint w, uint h)
   {
     for(int j = 0; j < h; j++)
     {
-      field[i+w*j].x = 1.4142135624f*((float)j/h-.5f); // Shear
-      field[i+w*j].y = 1.4142135624f*((float)i/w-.5f); 
+      field[i+w*j].x = 1.4142135624f*((float)j/h-.5f)*valW; // Shear
+      field[i+w*j].y = 1.4142135624f*((float)i/w-.5f)*valH; 
     }
   }
   //printMat2D(field,w,h,w/16);
