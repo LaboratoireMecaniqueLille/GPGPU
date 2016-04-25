@@ -9,3 +9,4 @@ FFTcorrel/main
 *.swp
 *~
 *_
+*.o
