@@ -1,9 +1,10 @@
 #include <iostream> //cout
-#include <fstream> //f.open
-#include <stdlib.h> //atof
+//#include <fstream> //f.open
+//#include <stdlib.h> //atof
 #include <cusolverDn.h> // Pour invert
 #include "kernels.cuh"//reduce
 #include "CUcorrel.h"//BLOCKSIZE
+#include "lodepng/lodepng.h"
 
 using namespace std;
 
@@ -62,49 +63,45 @@ void readParam(char** argv,float* values, int len)
   }
 }
 
-
-void getValues(string s, float* tab, int M)
-{
-  string sep = ",";
-  for(int i=0;i < M; i++)
-  {
-    tab[i] = atoi(s.substr(0,s.find(sep)).c_str());
-    s = s.erase(0,s.find(sep)+1);
-    //cout << tab[i] << ", ";
-  }
-  //cout << endl;
-
-}
-
 void readFile(char* address, float* data, float norm)
 {
-  ifstream f;
-  string line;
-  f.open(address);
-  if(!f.is_open()){cout << "Erreur lors de l'ouverture du fichier" << endl;exit(-1);}
-  for(int j = 0; j < HEIGHT;j++)
+  unsigned char *image;
+  uint i_w, i_h;
+  if(lodepng_decode32_file(&image,&i_w,&i_h,address))
   {
-    getline(f,line);
-    getValues(line,data+j*WIDTH,HEIGHT);
+    cout << "Erreur lors de l'ouverture du fichier." << endl;
+    exit(-1);
   }
-  f.close();
+  if(i_w != WIDTH || i_h != HEIGHT)
+  {
+    cout << "Taille de l'image incorecte: (" << i_w << ", " << i_h << ") au lieu de (" << WIDTH << ", " << HEIGHT << ")." << endl;
+    exit(-1);
+  }
+  for(int i = 0; i < IMG_SIZE; i++)
+  {
+    data[i] = image[4*i]/3.f+image[4*i+1]/3.f+image[4*i+2]/3.f;
+  }
+  free(image);
 }
 
-void writeFile(char* address, float* data, float norm, int offset, uint w, uint h)
+void writeFile(char* address, float* data, float offset, uint w, uint h)
 {
-  ofstream f;
-  f.open(address);
-  if(!f.is_open()){cout << "Erreur lors de l'ouverture du fichier" << endl;exit(-1);}
-  for(int j = 0;j < h;j++)
+  unsigned char *image = (unsigned char*)malloc(4*w*h*sizeof(unsigned char));
+  unsigned char val = 0;
+  for(int i = 0; i < w*h; i++)
   {
-    for(int i = 0; i < w;i++)
-    {
-      f << (int)(norm*data[i+j*w])+offset << ",";
-    }
-    f << "\n";
+    val = max(0.f,min(255.f,data[i]+offset));
+    image[4*i] = val;
+    image[4*i+1] = val;
+    image[4*i+2] = val;
+    image[4*i+3] = 255;
   }
-  f.close();
-  
+  if(lodepng_encode32_file(address, image, w, h))
+  {
+    cout << "Erreur lors de l'écriture !" << endl;
+    exit(-1);
+  }
+  free(image);
 }
 
 void checkError(cusolverStatus_t cuSolverStatus)
