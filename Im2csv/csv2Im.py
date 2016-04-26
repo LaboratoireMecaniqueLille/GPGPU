@@ -17,6 +17,13 @@ tab = []
 with open(csv_addr) as f:
   for l in f:
     tab.append(l.split(',')[:-1])
-a = np.array(tab,np.uint8)
+a = np.array(tab,np.float)
 
-cv2.imwrite(im_addr,a)
+"""
+a[a<0] = 0
+a[a>255] = 255
+print a[0:5][0:5]
+"""
+
+#cv2.imwrite(im_addr,a.astype(np.uint8))
+cv2.imwrite(im_addr,np.clip(a,0,255).astype(np.uint8))
