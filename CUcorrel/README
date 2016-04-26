@@ -8,4 +8,4 @@ Cette version utilise la méthode de Gauss Newton pour la résolution itérative
 
 Pour l'instant, le programme ouvre une seule image, la déforme et la bruite puis cherche à retrouver les paramètres de déformation. Par rapport à l'image originale en un nombre fixe d'itérations.
 
-Comme la résolution est directment effectuée sur l'image en pleine résolution, un grand déplacement résultera en une convergence vers un minimum local. La résolution pyramidale fait partie des fonctionnalités à venir pour éviter ce problème.
+Le programme rééchantillone l'image pour appliquer les premières itérations à des images plus petites, ce qui coûte moins cher en calcul. La convergence n'est pas toujours correcte, en particulier avec de grandes déformations sur les images contenant des hautes fréquences. Les recherches pour pallier à ce problème se font au niveau de l'interpolateur (une version à interpolateur bicubique arrive prochainement) et de la méthode du calcul du gradient.
