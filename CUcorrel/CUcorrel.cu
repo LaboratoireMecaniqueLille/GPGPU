@@ -117,14 +117,6 @@ int main(int argc, char** argv)
   cudaTextureObject_t tex[LVL]={0};
   cudaCreateTextureObject(&tex[0],&resDesc,&texDesc,NULL);
 
-// Test: appliquer l'interpolateur avec un petit décalage sur l'image d'origine pour la "flouter"
-  float param[PARAMETERS] = {.5f,.5f,0,0,0,0};
-  cudaMemcpy(devParam,param,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
-
-  deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devOrig, devFields[0],devParam,WIDTH,HEIGHT);
-  cudaMemcpyToArray(cuArray[0],0,0,orig,IMG_SIZE*sizeof(float),cudaMemcpyHostToDevice);
-//-----
-
   div = 2;
   for(int i = 1; i < LVL; i++)
   {
@@ -165,8 +157,10 @@ int main(int argc, char** argv)
   }
   */
   
+  
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
-  float paramI[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3};
+  float paramI[PARAMETERS]; // = {-.2,-2.318,3.22,-1.145,1.37,2.3};
+  float param[PARAMETERS];
   for(int i = 0; i < PARAMETERS; i++)
   //paramI[i] = 200.f*rand()/RAND_MAX-100.f;
   paramI[i] = 80.f*rand()/RAND_MAX-40.f;
@@ -188,6 +182,13 @@ int main(int argc, char** argv)
   cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice);// Pour ajouter le bruit
   addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef[0],devOut);
 
+
+  // ---------- Pour lire l'image déformée plutôt que la générer -----------
+  /*
+  readFile("img_d.csv",orig, 256);
+  cudaMemcpy(devDef[0],orig,IMG_SIZE*sizeof(float),cudaMemcpyHostToDevice);
+  */
+
   // ---------- Rééchantillonage de l'image pour les différents étages ----------
   gettimeofday(&t1, NULL);
   div = 2;
@@ -206,6 +207,7 @@ int main(int argc, char** argv)
   printMat(orig,WIDTH,HEIGHT,256);
 
 /*
+
   // ---------- [Facultatif] ecriture en .csv des images déformées mippées ----------
   div = 1;
   for(int i = 0; i < LVL; i++)
@@ -268,12 +270,6 @@ int main(int argc, char** argv)
     cout << " ###  Niveau n°" << l << " ###\n" << endl;
     cout << " Taille de l'image: " << WIDTH/div << "x" << HEIGHT/div << endl;
     res = 10000000000;// On remet une valeur hénaurme pour être sûr d'avoir une décroissante à la première itération
-/*
-    // ---------- [Facultatif] Pour enregistrer en .csv le devDef de chaque étaage ---------
-    cudaMemcpy(orig,devDef[l],IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
-    sprintf(oAddr,"devDef%d.csv",l);
-    writeFile(oAddr,orig,1, 0, WIDTH/div,HEIGHT/div);
-*/
     for(int i = 0;i < nbIter; i++)
     {
       gettimeofday(&t0,NULL);
