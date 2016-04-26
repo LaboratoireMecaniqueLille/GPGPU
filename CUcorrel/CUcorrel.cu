@@ -13,24 +13,30 @@ using namespace std;
 
 int main(int argc, char** argv)
 {
-
   struct timeval t0, t1, t2; // Pour mesurer les durées d'exécution
   cudaError_t err; // Pour récupérer les erreurs éventuelles
   size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
   size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
   int nbIter=10; // Le nombre d'itérations
-  char iAddr[10] = "img.csv"; // Le nom du fichier à ouvrir
+  char iAddr[10] = "img.png"; // Le nom du fichier à ouvrir
   float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
   dim3 blocksize[LVL]; // Pour l'appel aux kernels sur toute l'image (une pour chaque étage)
   dim3 gridsize[LVL];
   char oAddr[25]; // pour écrire les noms des fichiers de sortie
+  float param[PARAMETERS]; // Stocke les paramètres calculés
+  float res; // Le résidu 
+  float oldres; // Pour stocker le résidu de l'itération précédente et comparer
+  float vec[PARAMETERS]; // Pour stocker sur l'hôte les paramètres calculés
+  int c = 0; // Pour compter les boucles et quitter si on ajoute trop
   uint div = 1; // Pour diviser la taille dans les boucles
   for(int i = 0; i < LVL; i++)
   {
     blocksize[i].x = min(32,WIDTH/div);
     blocksize[i].y = min(32,HEIGHT/div);
+    blocksize[i].z = 1;
     gridsize[i].x = (WIDTH/div+31)/32;
     gridsize[i].y = (HEIGHT/div+31)/32;
+    gridsize[i].z = 1;
     div *= 2;
   }
   dim3 tailleMat(PARAMETERS,PARAMETERS); // La taille de la hessienne
@@ -128,7 +134,6 @@ int main(int argc, char** argv)
     div *= 2;
   }
 
-
   // --------- Calcul des matrices G ----------
   gettimeofday(&t1,NULL);
   div = 1;
@@ -150,22 +155,18 @@ int main(int argc, char** argv)
     for(int i = 0;i < PARAMETERS;i++)
     {
     cudaMemcpy(orig,devG[l]+i*WIDTH*HEIGHT/div/div,taille/div/div,cudaMemcpyDeviceToHost);
-    sprintf(oAddr,"G%d-%d.csv",l,i);
-    writeFile(oAddr, orig, 2, 128, WIDTH/div, HEIGHT/div);
+    sprintf(oAddr,"out/G%d-%d.png",l,i);
+    writeFile(oAddr, orig, 128, WIDTH/div, HEIGHT/div);
     }
     div *= 2;
   }
   */
   
-  
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
-  float paramI[PARAMETERS]; // = {-.2,-2.318,3.22,-1.145,1.37,2.3};
-  float param[PARAMETERS];
+  float paramI[PARAMETERS];
   for(int i = 0; i < PARAMETERS; i++)
-  //paramI[i] = 200.f*rand()/RAND_MAX-100.f;
   paramI[i] = 80.f*rand()/RAND_MAX-40.f;
-  //paramI[i] = 40.f*rand()/RAND_MAX-20.f;
-  //paramI[i] = 20.f*rand()/RAND_MAX-10.f;
+
   cout << "Paramètres réels: ";
   for(int i = 0; i < PARAMETERS;i++){cout << paramI[i] << ", ";}
   cout << endl;
@@ -179,13 +180,13 @@ int main(int argc, char** argv)
   { 
     orig[i] = (float)rand()/RAND_MAX*4.f-2.f;
   }
-  cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice);// Pour ajouter le bruit
-  addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef[0],devOut);
+  cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice); // Pour ajouter le bruit...
+  addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef[0],devOut); // ..directement sur le device
 
 
   // ---------- Pour lire l'image déformée plutôt que la générer -----------
   /*
-  readFile("img_d.csv",orig, 256);
+  readFile("img_d.png",orig, 256);
   cudaMemcpy(devDef[0],orig,IMG_SIZE*sizeof(float),cudaMemcpyHostToDevice);
   */
 
@@ -207,14 +208,13 @@ int main(int argc, char** argv)
   printMat(orig,WIDTH,HEIGHT,256);
 
 /*
-
-  // ---------- [Facultatif] ecriture en .csv des images déformées mippées ----------
+  // ---------- [Facultatif] ecriture en .png des images déformées mippées ----------
   div = 1;
   for(int i = 0; i < LVL; i++)
   {
     cudaMemcpy(orig,devDef[i],IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
-    sprintf(oAddr,"mip_%d.csv",i);
-    writeFile(oAddr, orig, 1, 0, WIDTH/div,HEIGHT/div);
+    sprintf(oAddr,"out/mip_%d.png",i);
+    writeFile(oAddr, orig, 0, WIDTH/div,HEIGHT/div);
     div *= 2;
   }
 */
@@ -227,10 +227,12 @@ int main(int argc, char** argv)
   cout << "Génération de la matrice: " << timeDiff(t1,t2) << " ms." << endl;
 
   // ---------- [Facultatif] Affichage de la Hessienne ----------
+  /*
   float test[PARAMETERS*PARAMETERS];
   cudaMemcpy(test,devMatrix,PARAMETERS*PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
   cout << "\nHessienne:" << endl;
   printMat(test,PARAMETERS,PARAMETERS);
+  */
 
   // ---------- Inversion de la hessienne ----------
   gettimeofday(&t1,NULL);
@@ -240,38 +242,30 @@ int main(int argc, char** argv)
   cout << "Inversion de la matrice: " << timeDiff(t1,t2) << " ms." << endl;
 
   // ---------- [Facultatif] Affichage de l'inverse ----------
+  /*
   cudaMemcpy(test,devInv,PARAMETERS*PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
   cout << "\nMatrice inversée:" << endl;
   printMat(test,PARAMETERS,PARAMETERS);
+  */
 
   // ---------- Écriture des paramètres initiaux ----------
   for(int i = 0; i < PARAMETERS; i++)
   param[i] = 0;
-  //param[i] = paramI[i];
   //readParam(argv,param); // Pour tester des valeurs de paramètres par défaut sans recompiler
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
 
-  // ---------- Écriture du pas des paramètres ----------
-  //float vecStep[PARAMETERS] = {2.f,2.f,2.f,2.f,2.f,2.f};
-  //float vecStep[PARAMETERS] = {1.f,1.f,1.f,1.f,1.f,1.f};
-  //cudaMemcpy(devVecStep,vecStep,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
-
-  float res; // Le résidu 
-  float oldres; // Pour stocker le résidu de l'itération précédente et comparer
-  float vec[PARAMETERS]; // Pour stocker sur l'hôte les paramètres calculés
-  int c = 0; // Pour compter les boucles (debug)
   
+  div /= 2; // On se sert de la dernière valeur de div (cela equivaut à div = pow(LVL-1,2) )
   // ---------- La boucle principale ---------
-  //Note: seules les instructions marquées par //-- sont réellement nécessaires, les autres sont opour la débug/le timing
-  div /= 2; // = 2^(LVL-1)
-  //float step = 5.f;
-  for(int l = LVL-1; l >= 0; l--)
+  for(int l = LVL-1; l >= 0; l--) // Boucler sur les étages de la pyramide
   {
     cout << " ###  Niveau n°" << l << " ###\n" << endl;
     cout << " Taille de l'image: " << WIDTH/div << "x" << HEIGHT/div << endl;
     res = 10000000000;// On remet une valeur hénaurme pour être sûr d'avoir une décroissante à la première itération
-    for(int i = 0;i < nbIter; i++)
+
+    for(int i = 0;i < nbIter; i++) // Itérer sur cet étage (en pratique, on fait rarement toutes les itérations)
     {
+      // ---------- Infos -------
       gettimeofday(&t0,NULL);
       cout << "Boucle n°" << i+1 << endl;
       cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
@@ -285,65 +279,50 @@ int main(int argc, char** argv)
       for(int j = 0; j < PARAMETERS;j++){cout << param[j]-paramI[j] << ", ";}
       cout << endl;
 
-
+      // --------- Interpolation ----------
       gettimeofday(&t1,NULL);
       deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div);//--
       cudaDeviceSynchronize();
       gettimeofday(&t2, NULL);
       cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
+
 /*
-      // --------- [Facultatif] Pour enregistrer en .csv l'image à chaque itération ----------
+      // --------- [Facultatif] Pour enregistrer en .png l'image à chaque itération ----------
       cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
-      sprintf(oAddr,"devOut%d-%d.csv",LVL-l,i);
+      sprintf(oAddr,"out/devOut%d-%d.png",LVL-l,i);
       writeFile(oAddr,orig,1,0, WIDTH/div,HEIGHT/div);
 */
+      // ------------ Calcul de la direction de recherche ------------
       gettimeofday(&t1,NULL);
       gradientDescent(devG[l], devOut, devDef[l], devVec, WIDTH/div, HEIGHT/div);//--
       cudaDeviceSynchronize();
-
       gettimeofday(&t2,NULL);
-      cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
 
+      // ----------- Affiche le gradient et le temps de calcul -------------
+      cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
       cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
       cout << "Gradient des paramètres:" << endl;
       printMat(vec,PARAMETERS,1);
       
+      // ---------- Methode de Newton (la matrice est déjà inversée) -------------
       gettimeofday(&t1,NULL);
-      //vecCpy<<<1,PARAMETERS>>>(devVecOld,devVec);
       myDot<<<1,PARAMETERS,PARAMETERS*sizeof(float)>>>(devInv,devVec,devVec);//--
-      //scalMul<<<1,PARAMETERS>>>(devVec,2.f);
-      //addVec<<<1,PARAMETERS>>>(devParam,devVec);//--
+      //scalMul<<<1,PARAMETERS>>>(devVec,2.f); // Pour un pas fixe
       cudaDeviceSynchronize();
       gettimeofday(&t2,NULL);
-      cout << "Mise à jour des valeurs: " << timeDiff(t1,t2) << " ms." << endl;
 
+      // ----------- Affiche le vecteur que l'on va ajouter aux paramètres -----------
+      cout << "Mise à jour des valeurs: " << timeDiff(t1,t2) << " ms." << endl;
       cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
       cout << "Direction:" << endl;
       printMat(vec,PARAMETERS,1);
 
-/*
-      gettimeofday(&t1, NULL);
-      oldres = res;//--
-      res = residuals(devOut, devDef[l], IMG_SIZE/div/div)/IMG_SIZE*div*div;//--
-      gettimeofday(&t2, NULL);
-      cout << "\nRésidu: "<< res << ", Calcul: " << timeDiff(t1,t2) << "ms." << endl;
-      cout << "\nExécution de toute la boucle: " << timeDiff(t0,t2) << "ms.\n**********************\n\n\n" << endl;
-      if(oldres - res < 0)//--
-      {
-        cout << "Augmentation de la fonctionnelle !!" << endl;
-        vecCpy<<<1,PARAMETERS>>>(devVec,devVecOld);
-        if(i >= 10)
-        break;
-      }//--
-*/
-
-      //Expérimental: Ajouter le vecteur plusieurs fois, jusqu'à réaugmentation de la fonctionnelle
-      //scalMul<<<1,PARAMETERS>>>(devVec,0.1f);
+      // ------------ Expérimental: ajouter tant que la fonctionnelle diminue ---------
       c = 0;
       while(c<60)
       {
         vecCpy<<<1,PARAMETERS>>>(devVecOld,devParam);
-        scalMul<<<1,PARAMETERS>>>(devVec,1.1f);
+        scalMul<<<1,PARAMETERS>>>(devVec,1.1f); // En augmentant sa taille à chaque fois pour accélérer la convergence
         addVec<<<1,PARAMETERS>>>(devParam,devVec);
         deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div);//--
         oldres = res;
