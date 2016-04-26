@@ -18,7 +18,7 @@ int main(int argc, char** argv)
   cudaError_t err; // Pour récupérer les erreurs éventuelles
   size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
   size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
-  int nbIter=60; // Le nombre d'itérations
+  int nbIter=10; // Le nombre d'itérations
   char iAddr[10] = "img.csv"; // Le nom du fichier à ouvrir
   float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
   dim3 blocksize[LVL]; // Pour l'appel aux kernels sur toute l'image (une pour chaque étage)
@@ -76,6 +76,14 @@ int main(int argc, char** argv)
   else if(cudaGetLastError() != cudaSuccess)
   {cout << "Erreur lors de l'allocation." << endl;exit(-1);}
 
+  // ---------- Écriture des fields définis dans fields.cu ----------
+  div = 1;
+  for(uint i = 0; i < LVL;i++)
+  {
+    writeFields(devFields[i],WIDTH/div,HEIGHT/div);
+    div *= 2;
+  }
+
   // ---------- Lecture du fichier et écriture sur le device ---------
   readFile(iAddr,orig,256);
   cudaMemcpy(devOrig,orig,taille,cudaMemcpyHostToDevice);
@@ -101,13 +109,21 @@ int main(int argc, char** argv)
   cudaTextureDesc texDesc;
   memset(&texDesc, 0, sizeof(texDesc));
   texDesc.readMode = cudaReadModeElementType;
-  texDesc.addressMode[0] = cudaAddressModeMirror; //cudaAddressModeClamp;
-  texDesc.addressMode[1] = cudaAddressModeMirror; //cudaAddressModeClamp;
+  texDesc.addressMode[0] = cudaAddressModeBorder; //cudaAddressModeClamp;
+  texDesc.addressMode[1] = cudaAddressModeBorder; //cudaAddressModeClamp;
   texDesc.filterMode = cudaFilterModeLinear;
   texDesc.normalizedCoords = 1;
 
   cudaTextureObject_t tex[LVL]={0};
   cudaCreateTextureObject(&tex[0],&resDesc,&texDesc,NULL);
+
+// Test: appliquer l'interpolateur avec un petit décalage sur l'image d'origine pour la "flouter"
+  float param[PARAMETERS] = {.5f,.5f,0,0,0,0};
+  cudaMemcpy(devParam,param,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
+
+  deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devOrig, devFields[0],devParam,WIDTH,HEIGHT);
+  cudaMemcpyToArray(cuArray[0],0,0,orig,IMG_SIZE*sizeof(float),cudaMemcpyHostToDevice);
+//-----
 
   div = 2;
   for(int i = 1; i < LVL; i++)
@@ -120,13 +136,6 @@ int main(int argc, char** argv)
     div *= 2;
   }
 
-  // ---------- Écriture des fields définis dans fields.cu ----------
-  div = 1;
-  for(uint i = 0; i < LVL;i++)
-  {
-    writeFields(devFields[i],WIDTH/div,HEIGHT/div);
-    div *= 2;
-  }
 
   // --------- Calcul des matrices G ----------
   gettimeofday(&t1,NULL);
@@ -159,10 +168,10 @@ int main(int argc, char** argv)
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
   float paramI[PARAMETERS] = {-.2,-2.318,3.22,-1.145,1.37,2.3};
   for(int i = 0; i < PARAMETERS; i++)
-  //paramI[i] = 80.f*rand()/RAND_MAX-40.f;
-  paramI[i] = 40.f*rand()/RAND_MAX-20.f;
+  //paramI[i] = 200.f*rand()/RAND_MAX-100.f;
+  paramI[i] = 80.f*rand()/RAND_MAX-40.f;
+  //paramI[i] = 40.f*rand()/RAND_MAX-20.f;
   //paramI[i] = 20.f*rand()/RAND_MAX-10.f;
-  float param[PARAMETERS];
   cout << "Paramètres réels: ";
   for(int i = 0; i < PARAMETERS;i++){cout << paramI[i] << ", ";}
   cout << endl;
@@ -248,24 +257,23 @@ int main(int argc, char** argv)
   float res; // Le résidu 
   float oldres; // Pour stocker le résidu de l'itération précédente et comparer
   float vec[PARAMETERS]; // Pour stocker sur l'hôte les paramètres calculés
+  int c = 0; // Pour compter les boucles (debug)
   
   // ---------- La boucle principale ---------
   //Note: seules les instructions marquées par //-- sont réellement nécessaires, les autres sont opour la débug/le timing
   div /= 2; // = 2^(LVL-1)
-  float step = 5.f;
-  res = 10000000000;// On remet une valeur hénaurme pour être sûr d'avoir une décroissante à la première itération
+  //float step = 5.f;
   for(int l = LVL-1; l >= 0; l--)
   {
     cout << " ###  Niveau n°" << l << " ###\n" << endl;
     cout << " Taille de l'image: " << WIDTH/div << "x" << HEIGHT/div << endl;
+    res = 10000000000;// On remet une valeur hénaurme pour être sûr d'avoir une décroissante à la première itération
 /*
     // ---------- [Facultatif] Pour enregistrer en .csv le devDef de chaque étaage ---------
     cudaMemcpy(orig,devDef[l],IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
     sprintf(oAddr,"devDef%d.csv",l);
     writeFile(oAddr,orig,1, 0, WIDTH/div,HEIGHT/div);
 */
-    //res = 10000000000;// On remet une valeur hénaurme pour être sûr d'avoir une décroissante à la première itération
-    step = 1.f;
     for(int i = 0;i < nbIter; i++)
     {
       gettimeofday(&t0,NULL);
@@ -305,12 +313,10 @@ int main(int argc, char** argv)
       printMat(vec,PARAMETERS,1);
       
       gettimeofday(&t1,NULL);
-      vecCpy<<<1,PARAMETERS>>>(devVecOld,devVec);
+      //vecCpy<<<1,PARAMETERS>>>(devVecOld,devVec);
       myDot<<<1,PARAMETERS,PARAMETERS*sizeof(float)>>>(devInv,devVec,devVec);//--
-      //ewMul<<<1,PARAMETERS>>>(devVec,devVecStep);//--
-      //scalMul<<<1,PARAMETERS>>>(devVec,2.f*(l+1));
-      scalMul<<<1,PARAMETERS>>>(devVec,2.f*(l+1));
-      addVec<<<1,PARAMETERS>>>(devParam,devVec);//--
+      //scalMul<<<1,PARAMETERS>>>(devVec,2.f);
+      //addVec<<<1,PARAMETERS>>>(devParam,devVec);//--
       cudaDeviceSynchronize();
       gettimeofday(&t2,NULL);
       cout << "Mise à jour des valeurs: " << timeDiff(t1,t2) << " ms." << endl;
@@ -319,21 +325,54 @@ int main(int argc, char** argv)
       cout << "Direction:" << endl;
       printMat(vec,PARAMETERS,1);
 
+/*
       gettimeofday(&t1, NULL);
       oldres = res;//--
       res = residuals(devOut, devDef[l], IMG_SIZE/div/div)/IMG_SIZE*div*div;//--
       gettimeofday(&t2, NULL);
       cout << "\nRésidu: "<< res << ", Calcul: " << timeDiff(t1,t2) << "ms." << endl;
       cout << "\nExécution de toute la boucle: " << timeDiff(t0,t2) << "ms.\n**********************\n\n\n" << endl;
-
-      err = cudaGetLastError();
-      if(err != cudaSuccess)
-      {cout << "ERREUR !!\n" << cudaGetErrorName(err) << endl;exit(-1);}
       if(oldres - res < 0)//--
       {
         cout << "Augmentation de la fonctionnelle !!" << endl;
+        vecCpy<<<1,PARAMETERS>>>(devVec,devVecOld);
+        if(i >= 10)
         break;
       }//--
+*/
+
+      //Expérimental: Ajouter le vecteur plusieurs fois, jusqu'à réaugmentation de la fonctionnelle
+      //scalMul<<<1,PARAMETERS>>>(devVec,0.1f);
+      c = 0;
+      while(c<60)
+      {
+        vecCpy<<<1,PARAMETERS>>>(devVecOld,devParam);
+        scalMul<<<1,PARAMETERS>>>(devVec,1.1f);
+        addVec<<<1,PARAMETERS>>>(devParam,devVec);
+        deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div);//--
+        oldres = res;
+        res = residuals(devOut, devDef[l], IMG_SIZE/div/div)/IMG_SIZE*div*div;//--
+        c++; // <= Haha...
+        cout << "Ajout: " << c << endl;
+        cout << "Résidu: "<< res <<  endl << endl;
+        if(res >= oldres)
+        {
+          cout << "> " << oldres << "! On annule" << endl;
+          vecCpy<<<1,PARAMETERS>>>(devParam,devVecOld);
+          res = oldres;
+          break;
+        }
+
+      }
+      err = cudaGetLastError();
+      if(err != cudaSuccess)
+      {cout << "ERREUR !!\n" << cudaGetErrorName(err) << endl;exit(-1);}
+      if(c<=1)
+      {
+        cout << "On n'avance plus... Boucle suivante !" << endl;
+        break;
+      }
+      
     }
     div /= 2;
   }
