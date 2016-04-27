@@ -294,9 +294,9 @@ int main(int argc, char** argv)
       sprintf(oAddr,"out/devOut%d-%d.png",LVL-l,i);
       writeFile(oAddr,orig,0,WIDTH/div,HEIGHT/div);
 */
-//*
-      // --------- [Facultatif] Pour enregistrer en .png la différence de l'image à chaque itération ----------
 
+/*
+      // --------- [Facultatif] Pour enregistrer en .png la différence de l'image ----------
       float def[WIDTH*HEIGHT];
       if(i == 0)
       {
@@ -305,7 +305,8 @@ int main(int argc, char** argv)
       cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
       sprintf(oAddr,"out/diffDevOut%d-%d.png",LVL-l,i);
       writeDiffFile(oAddr,orig,def,4.f,WIDTH/div,HEIGHT/div);
-//*/
+*/
+
       // ------------ Calcul de la direction de recherche ------------
       gettimeofday(&t1,NULL);
       gradientDescent(devG[l], devOut, devDef[l], devVec, WIDTH/div, HEIGHT/div); //--
@@ -355,7 +356,6 @@ int main(int argc, char** argv)
           cout << "Exécution de toute la boucle: " << timeDiff(t0,t2) << " ms." << endl;
           break; // --
         }
-
       }
       err = cudaGetLastError(); // --
       if(err != cudaSuccess) // --
@@ -366,7 +366,6 @@ int main(int argc, char** argv)
         gettimeofday(&t2,NULL);
         break; // --
       }
-      
     }
     cout << "Exécution de tout l'étage: " << timeDiff(t00,t2) << " ms." << endl;
     div /= 2; // --
