@@ -147,7 +147,7 @@ int main(int argc, char** argv)
   gettimeofday(&t2,NULL);
   cout << "Calcul des matrices G: " << timeDiff(t1,t2) << " ms." << endl;
 
-  // ------- [Facultatif] Écriture des G en .csv pour les visualiser -----------
+  // ------- [Facultatif] Écriture des G en .png pour les visualiser -----------
   /*
   div = 1;
   for(int l = 0; l < LVL; l++)
@@ -286,12 +286,12 @@ int main(int argc, char** argv)
       gettimeofday(&t2, NULL);
       cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
 
-/*
+//*
       // --------- [Facultatif] Pour enregistrer en .png l'image à chaque itération ----------
       cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
       sprintf(oAddr,"out/devOut%d-%d.png",LVL-l,i);
-      writeFile(oAddr,orig,1,0, WIDTH/div,HEIGHT/div);
-*/
+      writeFile(oAddr,orig,0,WIDTH/div,HEIGHT/div);
+//*/
       // ------------ Calcul de la direction de recherche ------------
       gettimeofday(&t1,NULL);
       gradientDescent(devG[l], devOut, devDef[l], devVec, WIDTH/div, HEIGHT/div);//--
