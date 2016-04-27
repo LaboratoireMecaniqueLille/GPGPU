@@ -13,7 +13,7 @@ using namespace std;
 
 int main(int argc, char** argv)
 {
-  struct timeval t0, t1, t2; // Pour mesurer les durées d'exécution
+  struct timeval t0, t1, t2, t00; // Pour mesurer les durées d'exécution
   cudaError_t err; // Pour récupérer les erreurs éventuelles
   size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
   size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
@@ -261,6 +261,7 @@ int main(int argc, char** argv)
   {
     cout << " ###  Niveau n°" << l << " ###\n" << endl;
     cout << " Taille de l'image: " << WIDTH/div << "x" << HEIGHT/div << endl;
+    gettimeofday(&t00,NULL);
     res = 10000000000;// On remet une valeur hénaurme pour être sûr d'avoir une décroissante à la première itération
 
     for(int i = 0;i < nbIter; i++) // Itérer sur cet étage (en pratique, on fait rarement toutes les itérations)
@@ -286,12 +287,12 @@ int main(int argc, char** argv)
       gettimeofday(&t2, NULL);
       cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
 
-//*
+/*
       // --------- [Facultatif] Pour enregistrer en .png l'image à chaque itération ----------
       cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
       sprintf(oAddr,"out/devOut%d-%d.png",LVL-l,i);
       writeFile(oAddr,orig,0,WIDTH/div,HEIGHT/div);
-//*/
+*/
       // ------------ Calcul de la direction de recherche ------------
       gettimeofday(&t1,NULL);
       gradientDescent(devG[l], devOut, devDef[l], devVec, WIDTH/div, HEIGHT/div);//--
@@ -319,6 +320,7 @@ int main(int argc, char** argv)
 
       // ------------ Expérimental: ajouter tant que la fonctionnelle diminue ---------
       c = 0;
+      gettimeofday(&t1,NULL);
       while(c<60)
       {
         vecCpy<<<1,PARAMETERS>>>(devVecOld,devParam);
@@ -332,9 +334,12 @@ int main(int argc, char** argv)
         cout << "Résidu: "<< res <<  endl << endl;
         if(res >= oldres)
         {
-          cout << "> " << oldres << "! On annule" << endl;
+          gettimeofday(&t2,NULL);
+          cout << res << " > " << oldres << "! On annule" << endl;
           vecCpy<<<1,PARAMETERS>>>(devParam,devVecOld);
           res = oldres;
+          cout << c << " ajouts successifs: " << timeDiff(t1,t2) << " ms." << endl;
+          cout << "Exécution de toute la boucle: " << timeDiff(t0,t2) << " ms." << endl;
           break;
         }
 
@@ -344,11 +349,13 @@ int main(int argc, char** argv)
       {cout << "ERREUR !!\n" << cudaGetErrorName(err) << endl;exit(-1);}
       if(c<=1)
       {
-        cout << "On n'avance plus... Boucle suivante !" << endl;
+        cout << "On n'avance plus... Étage suivant !" << endl;
+        gettimeofday(&t2,NULL);
         break;
       }
       
     }
+    cout << "Exécution de tout l'étage:: " << timeDiff(t00,t2) << " ms." << endl;
     div /= 2;
   }
 
