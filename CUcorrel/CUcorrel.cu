@@ -178,7 +178,7 @@ int main(int argc, char** argv)
   // ---------- Bruitage de l'image déformée ---------
   for(int i = 0; i < WIDTH*HEIGHT ; i++)
   { 
-    orig[i] = (float)rand()/RAND_MAX*4.f-2.f;
+    orig[i] = (float)rand()/RAND_MAX*10.f-5.f;
   }
   cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice); // Pour ajouter le bruit...
   addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef[0],devOut); // ..directement sur le device
@@ -287,12 +287,12 @@ int main(int argc, char** argv)
       gettimeofday(&t2, NULL);
       cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
 
-/*
+//*
       // --------- [Facultatif] Pour enregistrer en .png l'image à chaque itération ----------
       cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
       sprintf(oAddr,"out/devOut%d-%d.png",LVL-l,i);
       writeFile(oAddr,orig,0,WIDTH/div,HEIGHT/div);
-*/
+//*/
       // ------------ Calcul de la direction de recherche ------------
       gettimeofday(&t1,NULL);
       gradientDescent(devG[l], devOut, devDef[l], devVec, WIDTH/div, HEIGHT/div);//--
@@ -355,7 +355,7 @@ int main(int argc, char** argv)
       }
       
     }
-    cout << "Exécution de tout l'étage:: " << timeDiff(t00,t2) << " ms." << endl;
+    cout << "Exécution de tout l'étage: " << timeDiff(t00,t2) << " ms." << endl;
     div /= 2;
   }
 
