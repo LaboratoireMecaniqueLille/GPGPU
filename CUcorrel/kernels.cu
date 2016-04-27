@@ -74,11 +74,16 @@ http://docs.nvidia.com/cuda/samples/6_Advanced/reduction/doc/reduction.pdf
 
 __global__ void gradient(cudaTextureObject_t tex, float* gradX, float* gradY, uint w, uint h)
 {
-  //Utilise l'algo le plus simple: les différences centrées.
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
+  /*
+  //Algo le plus simple: les différences centrées.
   gradX[x+y*w]=(tex2D<float>(tex,(x+1.f)/w,(y+.5f)/h)-tex2D<float>(tex,(float)x/w,(y+.5f)/h));//*w/WIDTH;
   gradY[x+y*w]=(tex2D<float>(tex,(x+.5f)/w,(y+1.f)/h)-tex2D<float>(tex,(x+.5f)/w,(float)y/h));//*h/HEIGHT;
+  */
+  //Sobel:
+  gradX[x+w*y] = (tex2D<float>(tex,(x+1.5f)/w,(float)y/h)+tex2D<float>(tex,(x+1.5f)/w,(y+1.f)/h)-tex2D<float>(tex,(x-.5f)/w,(float)y/h)-tex2D<float>(tex,(x-.5f)/w,(y+1.f)/h))*2;
+  gradY[x+w*y] = (tex2D<float>(tex,(float)x/w,(y+1.5f)/h)+tex2D<float>(tex,(x+1.f)/w,(y+1.5f)/h)-tex2D<float>(tex,(float)x/w,(y-.5f)/h)-tex2D<float>(tex,(x+1.f)/w,(y-.5f)/h))*2.f;
 }
 
 float residuals(float* devData1, float* devData2, uint size)
