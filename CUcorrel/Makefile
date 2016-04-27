@@ -12,7 +12,7 @@ fields.o: fields.cu CUcorrel.h
 util.o: util.cu kernels.cuh CUcorrel.h lodepng/lodepng.h
 	nvcc -c util.cu
 
-kernels.o: kernels.cu kernels.cuh util.h
+kernels.o: kernels.cu kernels.cuh util.h bicubic.cu
 	nvcc -c kernels.cu
 
 lodepng.o: lodepng/lodepng.cpp lodepng/lodepng.h
