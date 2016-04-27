@@ -1,4 +1,4 @@
-all:CUcorrel
+all: CUcorrel
 
 CUcorrel: CUcorrel.o fields.o kernels.o util.o lodepng.o
 	nvcc -lcusolver -o CUcorrel *.o
@@ -20,3 +20,6 @@ lodepng.o: lodepng/lodepng.cpp lodepng/lodepng.h
 
 clean: 
 	rm -rf *.o
+
+run: CUcorrel
+	./CUcorrel
