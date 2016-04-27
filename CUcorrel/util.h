@@ -7,3 +7,4 @@ void readParam(char**,float*, int=6);
 void readFile(char*, float*, float);
 void writeFile(char*, float*, float, uint, uint);
 void invert(float*,float*);
+void writeDiffFile(char*, float*, float*, float, uint, uint);

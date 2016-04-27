@@ -104,6 +104,45 @@ void writeFile(char* address, float* data, float offset, uint w, uint h)
   free(image);
 }
 
+void writeDiffFile(char* address, float* data1, float* data2, float gain, uint w, uint h)
+{
+  // Attention: cette fonction est longue à exécuter, ne pas en abuser sous risque de voir la durée d'exécution exploser
+  unsigned char *image = (unsigned char*)malloc(4*w*h*sizeof(unsigned char));
+  unsigned char val = 0;
+  float diff,r,g;
+  for(int i = 0; i < w*h; i++)
+  {
+    // Niveau de gris (sombre là ou d2 < d1, clair si d2 > d1)
+    /*
+    val = 128.f+max(-128.f,min(127.f,gain*(data1[i]-data2[i])));
+    image[4*i] = val;
+    image[4*i+1] = val;
+    image[4*i+2] = val;
+    image[4*i+3] = 255;
+    */
+
+    // Un peu plus avancé: affiche l'image déformée avec du rouge là ou d2 > d1 et du vert si d2 < d1
+    diff = (data1[i] - data2[i])/256.f;
+    r = min(255.f/256.f,-min(0.f,diff*gain));
+    g = min(255.f/256.f,-min(0.f,-diff*gain));
+    val = max(0.f,min(255.f,(data1[i])));
+    val *= (1-r)*(1-g);
+    r*=256.f;
+    g*=256.f;
+    image[4*i] = val+r;
+    image[4*i+1] = val+g;
+    image[4*i+2] = val;
+    image[4*i+3] = 255;
+    
+  }
+  if(lodepng_encode32_file(address, image, w, h))
+  {
+    cout << "Erreur lors de l'écriture !" << endl;
+    exit(-1);
+  }
+  free(image);
+}
+
 void checkError(cusolverStatus_t cuSolverStatus)
 {
   if(cuSolverStatus == CUSOLVER_STATUS_SUCCESS)
