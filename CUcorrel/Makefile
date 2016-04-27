@@ -1,6 +1,6 @@
-all:executable
+all:CUcorrel
 
-executable: CUcorrel.o fields.o kernels.o util.o lodepng.o
+CUcorrel: CUcorrel.o fields.o kernels.o util.o lodepng.o
 	nvcc -lcusolver -o CUcorrel *.o
 
 CUcorrel.o: CUcorrel.cu CUcorrel.h util.h kernels.cuh
