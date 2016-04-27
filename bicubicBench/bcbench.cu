@@ -52,7 +52,7 @@ __device__ float h1(float a)
     return 1.0f + w3(a) / (w2(a) + w3(a)) + 0.5f;
 }
 
-__device__ float interpBicubic(cudaTextureObject_t tex, float x, float y)
+__device__ float interpBicubic(cudaTextureObject_t tex, float x, float y, float w, float h)
 {
     x -= 0.5f;
     y -= 0.5f;
@@ -69,10 +69,16 @@ __device__ float interpBicubic(cudaTextureObject_t tex, float x, float y)
     float h0y = h0(fy);
     float h1y = h1(fy);
 
+/*
     float r = g0(fy) * (g0x * tex2D<float>(tex, px + h0x, py + h0y)   +
                     g1x * tex2D<float>(tex, px + h1x, py + h0y)) +
           g1(fy) * (g0x * tex2D<float>(tex, px + h0x, py + h1y)   +
                     g1x * tex2D<float>(tex, px + h1x, py + h1y));
+*/
+    float r = g0(fy) * (g0x * tex2D<float>(tex, (px + h0x)/w, (py + h0y)/h)   +
+                    g1x * tex2D<float>(tex, (px + h1x)/w, (py + h0y)/h)) +
+          g1(fy) * (g0x * tex2D<float>(tex, (px + h0x)/w, (py + h1y)/h)   +
+                    g1x * tex2D<float>(tex, (px + h1x)/w, (py + h1y)/h));
     return r;
 }
 
@@ -96,10 +102,10 @@ __global__ void bicubic(cudaTextureObject_t tex, float* out)
 {
   int idx = blockIdx.x*blockDim.x+threadIdx.x;
   int idy = blockIdx.y*blockDim.y+threadIdx.y;
-  float x = (float)idx/WIDTH;
-  float y = (float)idy/HEIGHT;
+  /*float x = (float)idx/WIDTH;
+  float y = (float)idy/HEIGHT;*/
 
-  out[idx+WIDTH*idy] = interpBicubic(tex,x,y);
+  out[idx+WIDTH*idy] = interpBicubic(tex,idx,idy,WIDTH,HEIGHT);
 }
 
 
@@ -113,10 +119,12 @@ int main(int argc, char** argv)
 
   struct timeval t1, t2;
 
+  srand(time(NULL));
   float tab[SIZE];
   for(int i = 0; i < SIZE;i++)
   {
-    tab[i] = (float)(i%2)/SIZE;
+    //tab[i] = (float)(i)/SIZE;
+    tab[i] = (float)rand()/RAND_MAX*256.f;
   }
 
   cudaTextureObject_t tex=0;
