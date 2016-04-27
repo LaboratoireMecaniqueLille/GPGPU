@@ -3,6 +3,8 @@
 #include "util.h"
 #include <stdio.h>
 
+#include "bicubic.cu"
+
 float *devTemp;
 
 using namespace std;
@@ -14,15 +16,14 @@ __global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, fl
   if(x < w && y < h)
   {
     uint id = x+y*w;
-    float2 u;
-    u.x = 0;
-    u.y = 0;
+    float2 u = make_float2(0.f,0.f);
     for(int i = 0; i < PARAMETERS; i++)
     {
       u.x += devParam[i]*devU[i*w*h+id].x;
       u.y += devParam[i]*devU[i*w*h+id].y;
     }
-    devOut[id] = tex2D<float>(tex,(x+.5f-u.x)/w,(y+.5f-u.y)/h);
+    //devOut[id] = tex2D<float>(tex,(x+.5f-u.x)/w,(y+.5f-u.y)/h); // Interpolation bilinéaire (rapide mais altère plus l'image)
+    devOut[id] = interpBicubic(tex,(x-u.x),(y-u.y),w,h); // Interpolation bicubique (~ 2.25x plus long)
   }
 }
 
