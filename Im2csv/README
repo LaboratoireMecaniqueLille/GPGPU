@@ -1,6 +1,0 @@
-Petit script python pour convertir une image en un ficher csv, beaucoup plus simple à lire...
-Nécessite OpenCV2
-
-Non, ce n'est pas propre et oui ce n'est que temporaire.
-
-(C'est simplement pour les ouvrir facilement sans librairies en C/C++/CUDA, je m'occuperai de cette partie plus tard)
