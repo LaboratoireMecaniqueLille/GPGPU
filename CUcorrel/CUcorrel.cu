@@ -23,7 +23,7 @@ int main(int argc, char** argv)
   dim3 blocksize[LVL]; // Pour l'appel aux kernels sur toute l'image (une pour chaque étage)
   dim3 gridsize[LVL];
   char oAddr[25]; // pour écrire les noms des fichiers de sortie
-  float param[PARAMETERS]; // Stocke les paramètres calculés
+  float param[PARAMETERS] = {0}; // Stocke les paramètres calculés
   float res; // Le résidu 
   float oldres; // Pour stocker le résidu de l'itération précédente et comparer
   float vec[PARAMETERS]; // Pour stocker sur l'hôte les paramètres calculés
@@ -45,7 +45,6 @@ int main(int argc, char** argv)
   float *devGradX; // Gradient de l'image d'origine par rapport à X
   float *devGradY; // .. à Y
   float2 *devFields[LVL]; // Contient les PARAMETERS champs de déplacements élémentaires à la suite dont on cherche l'influence par autant de paramètres
-  float *devG[LVL]; // Les PARAMETERS matrices gradient*champ
   float *devParam; // Contient la valeur actuelle calculée des paramètres
   float *devDef[LVL]; // Image déformée à recaler (ici calculée à partir de l'image d'origine)
   float *devOut; // L'image interpolée à chaque itération
@@ -65,7 +64,6 @@ int main(int argc, char** argv)
   for(int i = 0; i < LVL; i++)
   {
     cudaMalloc(&devFields[i],PARAMETERS*taille2/div);
-    cudaMalloc(&devG[i],PARAMETERS*taille/div);
     cudaMalloc(&devDef[i],taille/div);
     div*=4;
   }
@@ -136,32 +134,43 @@ int main(int argc, char** argv)
 
   // --------- Calcul des matrices G ----------
   gettimeofday(&t1,NULL);
+  cudaTextureObject_t texG[LVL][PARAMETERS]={{0}};
+  cudaArray *Garray[LVL][PARAMETERS];
   div = 1;
   for(int i = 0; i < LVL; i++)
   {
     gradient<<<gridsize[i],blocksize[i]>>>(tex[i],devGradX,devGradY, WIDTH/div, HEIGHT/div);
-    makeG<<<1,PARAMETERS>>>(devG[i],devFields[i],devGradX,devGradY,WIDTH/div,HEIGHT/div);
+    resDesc.res.linear.sizeInBytes = IMG_SIZE/div/div*sizeof(float);
+    for(int j = 0; j < PARAMETERS; j++)
+    {
+      cudaMallocArray(&Garray[i][j], &channelDesc, WIDTH/div, HEIGHT/div);
+      makeGArray(Garray[i][j],devFields[i]+j*IMG_SIZE/div/div, devGradX, devGradY, WIDTH/div, HEIGHT/div);
+      resDesc.res.linear.devPtr = Garray[i][j];
+      cudaCreateTextureObject(&texG[i][j],&resDesc,&texDesc,NULL);
+    }
     div *= 2;
   }
   cudaDeviceSynchronize();
   gettimeofday(&t2,NULL);
   cout << "Calcul des matrices G: " << timeDiff(t1,t2) << " ms." << endl;
 
-  // ------- [Facultatif] Écriture des G en .png pour les visualiser -----------
-  /*
+  // --------- [Facultatif] Ecriture des G en .png -----------
+/*
+  cudaMemcpy(devParam,param,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
   div = 1;
   for(int l = 0; l < LVL; l++)
   {
-    for(int i = 0;i < PARAMETERS;i++)
+    for(int p = 0; p < PARAMETERS; p++)
     {
-    cudaMemcpy(orig,devG[l]+i*WIDTH*HEIGHT/div/div,taille/div/div,cudaMemcpyDeviceToHost);
-    sprintf(oAddr,"out/G%d-%d.png",l,i);
-    writeFile(oAddr, orig, 128, WIDTH/div, HEIGHT/div);
+      deform2D_b<<<gridsize[l],blocksize[l]>>>(texG[l][p],devOut,devFields[l],devParam,WIDTH/div,HEIGHT/div);
+      cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
+      sprintf(oAddr,"out/Gl%d-p%d.png",l,p);
+      writeFile(oAddr,orig,128,WIDTH/div,HEIGHT/div);
     }
-    div *= 2;
+    div*=2;
   }
-  */
-  
+*/
+
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
   float paramI[PARAMETERS];
   for(int i = 0; i < PARAMETERS; i++)
@@ -176,14 +185,12 @@ int main(int argc, char** argv)
   deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devDef[0],devFields[0],devParam,WIDTH,HEIGHT);
 
   // ---------- Bruitage de l'image déformée ---------
-  /*
   for(int i = 0; i < WIDTH*HEIGHT ; i++)
   { 
     orig[i] = (float)rand()/RAND_MAX*10.f-5.f;
   }
   cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice); // Pour ajouter le bruit...
   addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef[0],devOut); // ..directement sur le device
-*/
 
   // ---------- Pour lire l'image déformée plutôt que la générer -----------
   /*
@@ -222,32 +229,33 @@ int main(int argc, char** argv)
 
   // ---------- Calcul de la Hessienne ----------
   gettimeofday(&t1,NULL);
-  makeMatrix<<<1,tailleMat>>>(devMatrix,devG[0]);
+  //makeMatrix<<<1,tailleMat>>>(devMatrix,texG[0]); // On ne peut pas passer un tableau d'array au device !
+  makeHessian(devMatrix,texG[0]);
   cudaDeviceSynchronize();
   gettimeofday(&t2, NULL);
-  cout << "Génération de la matrice: " << timeDiff(t1,t2) << " ms." << endl;
+  cout << "Génération de la hessienne: " << timeDiff(t1,t2) << " ms." << endl;
 
   // ---------- [Facultatif] Affichage de la Hessienne ----------
-  /*
+  //*
   float test[PARAMETERS*PARAMETERS];
   cudaMemcpy(test,devMatrix,PARAMETERS*PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
   cout << "\nHessienne:" << endl;
   printMat(test,PARAMETERS,PARAMETERS);
-  */
+  //*/
 
   // ---------- Inversion de la hessienne ----------
   gettimeofday(&t1,NULL);
   invert(devMatrix,devInv);
   cudaDeviceSynchronize();
   gettimeofday(&t2,NULL);
-  cout << "Inversion de la matrice: " << timeDiff(t1,t2) << " ms." << endl;
+  cout << "Inversion de la hessienne: " << timeDiff(t1,t2) << " ms." << endl;
 
   // ---------- [Facultatif] Affichage de l'inverse ----------
-  /*
+  //*
   cudaMemcpy(test,devInv,PARAMETERS*PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
   cout << "\nMatrice inversée:" << endl;
   printMat(test,PARAMETERS,PARAMETERS);
-  */
+  //*/
 
   // ---------- Écriture des paramètres initiaux ----------
   for(int i = 0; i < PARAMETERS; i++)
@@ -309,7 +317,7 @@ int main(int argc, char** argv)
 
       // ------------ Calcul de la direction de recherche ------------
       gettimeofday(&t1,NULL);
-      gradientDescent(devG[l], devOut, devDef[l], devVec, WIDTH/div, HEIGHT/div); //--
+      gradientDescent(texG[l], devOut, devDef[l], devVec, devParam, devFields[l], WIDTH/div, HEIGHT/div); //--
       cudaDeviceSynchronize();
       gettimeofday(&t2,NULL);
 
@@ -338,7 +346,7 @@ int main(int argc, char** argv)
       while(c<60)
       {
         vecCpy<<<1,PARAMETERS>>>(devVecOld,devParam); //--
-        scalMul<<<1,PARAMETERS>>>(devVec,1.1f); // -- En augmentant sa taille à chaque fois pour accélérer la convergence
+        scalMul<<<1,PARAMETERS>>>(devVec,1.55f); // -- En augmentant sa taille à chaque fois pour accélérer la convergence
         addVec<<<1,PARAMETERS>>>(devParam,devVec); // --
         deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div); //--
         oldres = res; // --
@@ -390,7 +398,7 @@ int main(int argc, char** argv)
   {
     cudaFree(devDef[i]);
     cudaFree(devFields[i]);
-    cudaFree(devG[i]);
+    //cudaFree(devG[i]);
   }
   cudaFree(devOut);
   cudaFree(devMatrix);

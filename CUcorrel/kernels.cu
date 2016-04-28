@@ -22,8 +22,24 @@ __global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, fl
       u.x += devParam[i]*devU[i*w*h+id].x;
       u.y += devParam[i]*devU[i*w*h+id].y;
     }
-    //devOut[id] = tex2D<float>(tex,(x+.5f-u.x)/w,(y+.5f-u.y)/h); // Interpolation bilinéaire (rapide mais altère plus l'image)
     devOut[id] = interpBicubic(tex,(x-u.x),(y-u.y),w,h); // Interpolation bicubique (~ 2.25x plus long)
+  }
+}
+
+__global__ void deform2D_b(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam, const uint w, const uint h)
+{
+  uint x = blockIdx.x*blockDim.x+threadIdx.x;
+  uint y = blockIdx.y*blockDim.y+threadIdx.y;
+  if(x < w && y < h)
+  {
+    uint id = x+y*w;
+    float2 u = make_float2(0.f,0.f);
+    for(int i = 0; i < PARAMETERS; i++)
+    {
+      u.x += devParam[i]*devU[i*w*h+id].x;
+      u.y += devParam[i]*devU[i*w*h+id].y;
+    }
+    devOut[id] = tex2D<float>(tex,(x+.5f-u.x)/w,(y+.5f-u.y)/h); // Interpolation bilinéaire (rapide mais altère plus l'image)
   }
 }
 
@@ -101,7 +117,7 @@ float residuals(float* devData1, float* devData2, uint size)
 
 void initCuda()
 {
-  cudaMalloc(&devTemp,HEIGHT*WIDTH*sizeof(float));
+  cudaMalloc(&devTemp,IMG_SIZE*sizeof(float));
 }
 
 void cleanCuda()
@@ -111,53 +127,36 @@ void cleanCuda()
 
 __global__ void makeG(float* G, float2* U, float* gradX, float* gradY, uint w, uint h)
 {
-  uint id = threadIdx.x*w*h;
-  for(int i = 0; i < w; i++)
-  {
-    for(int j = 0; j < h; j++)
-    {
-      G[id+j*w+i] = gradX[j*w+i]*U[id+j*w+i].x+gradY[j*w+i]*U[id+j*w+i].y;
-    }
-  }
+  uint idx = threadIdx.x+blockDim.x*blockIdx.x;
+  uint idy = threadIdx.y+blockDim.y*blockIdx.y;
+  G[idy*w+idx] = gradX[idy*w+idx]*U[idy*w+idx].x+gradY[idy*w+idx]*U[idy*w+idx].y;
 }
 
-__global__ void makeMatrix(float* mat, float* G)
+void makeGArray(cudaArray* array, float2* U, float* gradX, float* gradY, uint w, uint h)
 {
-  uint x = threadIdx.x;
-  uint y = threadIdx.y;
-  if(x < y) // La matrice est symétrique: on ne calcule pas les coefficients connus mais on attend qu'ils soient calculés et on les copie
-  {
-    __syncthreads();
-    mat[x+y*PARAMETERS] = mat[y+x*PARAMETERS];
-  }
-  else
-  {
-    float val = 0;
-    for(uint i = 0; i < WIDTH; i++) // Possibilté de faire un kernel de réduction device ? (pas prioritaire car cette donction n'est lancée qu'une fois)
-    {
-      for(uint j = 0; j < HEIGHT; j++)
-      {
-        val += G[x*IMG_SIZE+j*WIDTH+i]*G[y*IMG_SIZE+j*WIDTH+i];
-      }
-    }
-    mat[x+y*PARAMETERS] = val/IMG_SIZE;
-    __syncthreads();
-  }
+  dim3 blocksize(min(32,w),min(32,h));
+  dim3 gridsize((w+31)/32,(h+31)/32);
+  makeG<<<gridsize,blocksize>>>(devTemp, U, gradX, gradY, w, h);
+  cudaMemcpyToArray(array, 0, 0, devTemp, w*h*sizeof(float), cudaMemcpyDeviceToDevice);
 }
 
-__global__ void gdSum(float* out, float* G, float* orig, float* def, float norm)
+__global__ void gdSum(float* out, cudaTextureObject_t texG, float* orig, float* def, float* param, float2* field, uint w, uint h, uint p)
 {
-  uint id = blockIdx.x*blockDim.x+threadIdx.x;
-  //float diff = orig[id] - def[id];
-  out[id] = (orig[id]-def[id])*G[id]/norm;
+  uint idx = blockIdx.x*blockDim.x+threadIdx.x;
+  uint idy = blockIdx.y*blockDim.y+threadIdx.y;
+  uint id = w*idy+idx;
+  //out[id] = (orig[id]-def[id])*G[id]/norm;
+  out[id] = (orig[id]-def[id])*tex2D<float>(texG,(idx-param[p]*field[id].x)/w,(idy-param[p]*field[id].y)/h)/(w*h);
 }
 
-void gradientDescent(float* devG, float* devOut, float* devDef, float* devVect, uint w, uint h)
+void gradientDescent(cudaTextureObject_t* texG, float* devOut, float* devDef, float* devVect, float* devParam, float2* devFields, uint w, uint h)
 {
   for(uint p = 0; p < PARAMETERS; p++)
   {
   uint size = w*h;
-  gdSum<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp, devG+p*size, devOut, devDef, w*h);
+  dim3 blocks(min(w,32),min(h,32));
+  dim3 grid((w+31)/32,(h+31)/32);
+  gdSum<<<grid,blocks>>>(devTemp, texG[p], devOut, devDef, devParam, devFields+w*h*p, w, h, p);
   uint blocksize;
     while(size>1)
     {
@@ -237,4 +236,36 @@ __global__ void vecCpy(float* dest, float* source)
 {
   uint id = threadIdx.x;
   dest[id] = source[id];
+}
+
+__global__ void evalProduct(float* out, cudaTextureObject_t t1, cudaTextureObject_t t2, uint w, uint h)
+{
+  uint idx = blockIdx.x*blockDim.x+threadIdx.x;
+  uint idy = blockIdx.y*blockDim.y+threadIdx.y;
+  out[w*idy+idx] = tex2D<float>(t1,(float)idx/w,(float)idy/h)*tex2D<float>(t2,(float)idx/w,(float)idy/h);
+}
+
+void makeHessian(float* devH, cudaTextureObject_t* texG)
+{
+  dim3 gridsize((WIDTH+31)/32,(HEIGHT+31)/32);
+  dim3 blocksize(32,32);
+  for(int i = 0; i < PARAMETERS; i++)
+  {
+    for(int j = 0; j <= i; j++)
+    {
+      evalProduct<<<gridsize,blocksize>>>(devTemp,texG[i],texG[j], WIDTH, HEIGHT);
+      uint size = IMG_SIZE;
+      uint blocksize;
+      while(size>1)
+      {
+        blocksize = (size+2*BLOCKSIZE-1)/(2*BLOCKSIZE);
+        reduce<<<blocksize,min(size,BLOCKSIZE)>>>(devTemp,size);
+        size = blocksize;
+      }
+      scalMul<<<1,1>>>(devTemp,1.f/IMG_SIZE);
+      cudaMemcpy(devH+PARAMETERS*i+j,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
+      if(j != i)
+        cudaMemcpy(devH+PARAMETERS*j+i,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
+    }
+  }
 }
