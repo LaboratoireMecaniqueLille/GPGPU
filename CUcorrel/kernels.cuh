@@ -15,4 +15,4 @@ float residuals(float*, float*, uint);
 void initCuda();
 void genMip(cudaTextureObject_t, cudaArray*, uint, uint);
 void cleanCuda();
-void gradientDescent(float*, float*, float*, float*i, uint, uint);
+void gradientDescent(float*, float*, float*, float*, uint, uint);

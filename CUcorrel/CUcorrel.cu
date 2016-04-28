@@ -349,7 +349,7 @@ int main(int argc, char** argv)
         if(res >= oldres) // --
         {
           gettimeofday(&t2,NULL);
-          cout << res << " > " << oldres << "! On annule" << endl;
+          cout << res << " >= " << oldres << "! On annule" << endl;
           vecCpy<<<1,PARAMETERS>>>(devParam,devVecOld); // --
           res = oldres; // --
           cout << c << " ajouts successifs: " << timeDiff(t1,t2) << " ms." << endl;
