@@ -172,7 +172,7 @@ int main(int argc, char** argv)
 */
 
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
-  float paramI[PARAMETERS];
+  float paramI[PARAMETERS] = {-12,30,21,25,-24,15}; // Commenter la boucle pour tester les réglages sur un même jeu de paramètres
   for(int i = 0; i < PARAMETERS; i++)
   paramI[i] = 80.f*rand()/RAND_MAX-40.f;
 
@@ -340,13 +340,13 @@ int main(int argc, char** argv)
       cout << "Direction:" << endl;
       printMat(vec,PARAMETERS,1);
 
-      // ------------ Expérimental: ajouter tant que la fonctionnelle diminue ---------
+      // ------------ Ajouter tant que la fonctionnelle diminue ---------
       c = 0; // --
       gettimeofday(&t1,NULL);
       while(c<60)
       {
         vecCpy<<<1,PARAMETERS>>>(devVecOld,devParam); //--
-        scalMul<<<1,PARAMETERS>>>(devVec,1.55f); // -- En augmentant sa taille à chaque fois pour accélérer la convergence
+        scalMul<<<1,PARAMETERS>>>(devVec,1.3f); // -- En augmentant sa taille à chaque fois pour accélérer la convergence
         addVec<<<1,PARAMETERS>>>(devParam,devVec); // --
         deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div); //--
         oldres = res; // --

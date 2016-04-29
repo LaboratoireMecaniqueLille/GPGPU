@@ -145,8 +145,8 @@ __global__ void gdSum(float* out, cudaTextureObject_t texG, float* orig, float* 
   uint idx = blockIdx.x*blockDim.x+threadIdx.x;
   uint idy = blockIdx.y*blockDim.y+threadIdx.y;
   uint id = w*idy+idx;
-  //out[id] = (orig[id]-def[id])*G[id]/norm;
-  out[id] = (orig[id]-def[id])*tex2D<float>(texG,(idx-param[p]*field[id].x)/w,(idy-param[p]*field[id].y)/h)/(w*h);
+  //out[id] = (orig[id]-def[id])*tex2D<float>(texG,(idx-param[p]*field[id].x)/w,(idy-param[p]*field[id].y)/h)/(w*h);
+  out[id] = max(-50.f,min(50.f,(orig[id]-def[id])))*tex2D<float>(texG,(idx-param[p]*field[id].x)/w,(idy-param[p]*field[id].y)/h)/(w*h); // Pour limiter l'impact des endroits où l'image est complètement à côté.
 }
 
 void gradientDescent(cudaTextureObject_t* texG, float* devOut, float* devDef, float* devVect, float* devParam, float2* devFields, uint w, uint h)
