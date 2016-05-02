@@ -9,7 +9,7 @@ float *devTemp;
 
 using namespace std;
 
-__global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam, const uint w, const uint h)
+__global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam, uint w, uint h)
 {
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
@@ -26,7 +26,7 @@ __global__ void deform2D(cudaTextureObject_t tex,float *devOut, float2* devU, fl
   }
 }
 
-__global__ void deform2D_b(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam, const uint w, const uint h)
+__global__ void deform2D_b(cudaTextureObject_t tex,float *devOut, float2* devU, float *devParam, uint w, uint h)
 {
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
