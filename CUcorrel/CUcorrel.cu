@@ -68,6 +68,7 @@ int main(int argc, char** argv)
     div*=4;
   }
   cudaMalloc(&devParam,PARAMETERS*sizeof(float));
+  cudaMemcpy(devParam,param,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
   cudaMalloc(&devOut,taille);
   cudaMalloc(&devMatrix,PARAMETERS*PARAMETERS*sizeof(float));
   cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(float));
@@ -132,6 +133,22 @@ int main(int argc, char** argv)
     div *= 2;
   }
 
+  // --------- [Facultatif] Ecriture de l'image originale aux différentes échelles -------
+  /*
+  div = 1;
+  for(int i=0; i < LVL;i++)
+  {
+    deform2D<<<gridsize[i],blocksize[i]>>>(tex[i], devOut, devFields[i], devParam, WIDTH/div, HEIGHT/div);
+    cudaDeviceSynchronize();
+    cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
+    sprintf(oAddr,"out/orig%d.png",i);
+    writeFile(oAddr, orig, 0, WIDTH/div, HEIGHT/div);
+    div *= 2;
+  }
+  cout << "OK" << endl;
+  */
+
   // --------- Calcul des matrices G ----------
   gettimeofday(&t1,NULL);
   cudaTextureObject_t texG[LVL][PARAMETERS]={{0}};
@@ -172,7 +189,7 @@ int main(int argc, char** argv)
 */
 
   // --------- Allocation et assignation des paramètres de déformation de devDef ----------
-  float paramI[PARAMETERS] = {-12,30,21,25,-24,15}; // Commenter la boucle pour tester les réglages sur un même jeu de paramètres
+  float paramI[PARAMETERS] = {-12,30}; // Commenter la boucle pour tester les réglages sur un même jeu de paramètres
   for(int i = 0; i < PARAMETERS; i++)
   paramI[i] = 80.f*rand()/RAND_MAX-40.f;
 
@@ -343,10 +360,10 @@ int main(int argc, char** argv)
       // ------------ Ajouter tant que la fonctionnelle diminue ---------
       c = 0; // --
       gettimeofday(&t1,NULL);
-      while(c<60)
+      while(c<10)
       {
         vecCpy<<<1,PARAMETERS>>>(devVecOld,devParam); //--
-        scalMul<<<1,PARAMETERS>>>(devVec,1.3f); // -- En augmentant sa taille à chaque fois pour accélérer la convergence
+        scalMul<<<1,PARAMETERS>>>(devVec,1.f+.15f*c); // -- En augmentant sa taille à chaque fois pour accélérer la convergence
         addVec<<<1,PARAMETERS>>>(devParam,devVec); // --
         deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div); //--
         oldres = res; // --
