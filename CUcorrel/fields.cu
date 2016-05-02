@@ -4,7 +4,7 @@
 
 //using namespace std;
 
-//6 champs: 3 mvt de corps solide, 2 déformations uniformes et 1 cisaillement
+//2 champs: 2 mvt de corps solide
 
 void writeFields(float2* devFields, uint w, uint h)
 {
@@ -35,46 +35,4 @@ void writeFields(float2* devFields, uint w, uint h)
   }
   //printMat2D(field,w,h,w/16);
   cudaMemcpy(devFields+w*h,field,taille2,cudaMemcpyHostToDevice);
-
-  for(int i = 0; i < w; i++)
-  {
-    for(int j = 0; j < h; j++)
-    {
-      field[i+w*j].x = 1.4142135624f*(j-h/2.f)/HEIGHT; // Rotation
-      field[i+w*j].y = 1.4142135624f*(w/2.f-i)/WIDTH;
-    }
-  }
-  //printMat2D(field,w,h,w/16);
-  cudaMemcpy(devFields+2*w*h,field,taille2,cudaMemcpyHostToDevice);
-  for(int i = 0; i < w; i++)
-  {
-    for(int j = 0; j < h; j++)
-    {
-      field[i+w*j].x = (2.f*i-(float)w)/WIDTH; // Stretch X
-      field[i+w*j].y = 0.f;
-    }
-  }
-  //printMat2D(field,w,h,w/16);
-  cudaMemcpy(devFields+3*w*h,field,taille2,cudaMemcpyHostToDevice);
-  for(int i = 0; i < w; i++)
-  {
-    for(int j = 0; j < h; j++)
-    {
-      field[i+w*j].x = 0.f; // Stretch Y
-      field[i+w*j].y = (2.f*j-(float)h)/HEIGHT;
-    }
-  }
-  //printMat2D(field,w,h,w/16);
-  cudaMemcpy(devFields+4*w*h,field,taille2,cudaMemcpyHostToDevice);
-
-  for(int i = 0; i < w; i++)
-  {
-    for(int j = 0; j < h; j++)
-    {
-      field[i+w*j].x = 1.4142135624f*((float)j/h-.5f)*valW; // Shear
-      field[i+w*j].y = 1.4142135624f*((float)i/w-.5f)*valH; 
-    }
-  }
-  //printMat2D(field,w,h,w/16);
-  cudaMemcpy(devFields+5*w*h,field,taille2,cudaMemcpyHostToDevice);
 }
