@@ -1,7 +1,7 @@
 __global__ void deform2D(cudaTextureObject_t, float*, float2*, float*, uint, uint);
+__global__ void deform2D_t(cudaTextureObject_t, float*, float2*, float*, uint, int2);
 __global__ void deform2D_b(cudaTextureObject_t, float*, float2*, float*, uint, uint);
 __global__ void lsq(float*, float*, float*, int);
-__global__ void reduce(float*, uint);
 __global__ void gradient(cudaTextureObject_t, float*, float*, uint, uint);
 __global__ void makeG(float*, float2*, float*, float*, uint, uint);
 __global__ void gdSum(float*, cudaTextureObject_t, float*, float*, float*, float2*, uint, uint, uint);
