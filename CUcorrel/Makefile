@@ -9,10 +9,10 @@ CUcorrel.o: CUcorrel.cu CUcorrel.h util.h kernels.cuh
 fields.o: fields.cu CUcorrel.h
 	nvcc -c fields.cu
 
-util.o: util.cu kernels.cuh CUcorrel.h lodepng/lodepng.h
+util.o: util.cu kernels.cuh CUcorrel.h lodepng/lodepng.h util.h
 	nvcc -c util.cu
 
-kernels.o: kernels.cu kernels.cuh util.h bicubic.cu
+kernels.o: kernels.cu CUcorrel.h kernels.cuh util.h bicubic.cu
 	nvcc -c kernels.cu
 
 lodepng.o: lodepng/lodepng.cpp lodepng/lodepng.h
