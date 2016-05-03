@@ -171,32 +171,10 @@ int main(int argc, char** argv)
   }
 */
 
-  // --------- Allocation et assignation des paramètres de déformation de devDef ----------
-  float paramI[PARAMETERS] = {-12,30,21,25,-24,15}; // Commenter la boucle pour tester les réglages sur un même jeu de paramètres
-  for(int i = 0; i < PARAMETERS; i++)
-  paramI[i] = 80.f*rand()/RAND_MAX-40.f;
 
-  cout << "Paramètres réels: ";
-  for(int i = 0; i < PARAMETERS;i++){cout << paramI[i] << ", ";}
-  cout << endl;
-  cudaMemcpy(devParam, paramI, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
-
-  // ---------- Calcul de l'image à recaler ----------
-  deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devDef[0],devFields[0],devParam,WIDTH,HEIGHT);
-
-  // ---------- Bruitage de l'image déformée ---------
-  for(int i = 0; i < WIDTH*HEIGHT ; i++)
-  { 
-    orig[i] = (float)rand()/RAND_MAX*10.f-5.f;
-  }
-  cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice); // Pour ajouter le bruit...
-  addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef[0],devOut); // ..directement sur le device
-
-  // ---------- Pour lire l'image déformée plutôt que la générer -----------
-  /*
+  // ---------- Lecture de l'image déformée  -----------
   readFile("img_d.png",orig, 256);
   cudaMemcpy(devDef[0],orig,IMG_SIZE*sizeof(float),cudaMemcpyHostToDevice);
-  */
 
   // ---------- Rééchantillonage de l'image pour les différents étages ----------
   gettimeofday(&t1, NULL);
@@ -279,14 +257,8 @@ int main(int argc, char** argv)
       gettimeofday(&t0,NULL);
       cout << "Boucle n°" << i+1 << endl;
       cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
-      cout << "Paramètres réels: ";
-      for(int j = 0; j < PARAMETERS;j++){cout << paramI[j] << ", ";}
-      cout << endl;
       cout << "Paramètres calculés: ";
       for(int j = 0; j < PARAMETERS;j++){cout << param[j] << ", ";}
-      cout << endl;
-      cout << "Différence: ";
-      for(int j = 0; j < PARAMETERS;j++){cout << param[j]-paramI[j] << ", ";}
       cout << endl;
 
       // --------- Interpolation ----------
@@ -303,7 +275,7 @@ int main(int argc, char** argv)
       writeFile(oAddr,orig,0,WIDTH/div,HEIGHT/div);
 */
 
-/*
+//*
       // --------- [Facultatif] Pour enregistrer en .png la différence de l'image ----------
       float def[WIDTH*HEIGHT];
       if(i == 0)
@@ -313,7 +285,7 @@ int main(int argc, char** argv)
       cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
       sprintf(oAddr,"out/diffDevOut%d-%d.png",LVL-l,i);
       writeDiffFile(oAddr,orig,def,4.f,WIDTH/div,HEIGHT/div);
-*/
+//*/
 
       // ------------ Calcul de la direction de recherche ------------
       gettimeofday(&t1,NULL);
