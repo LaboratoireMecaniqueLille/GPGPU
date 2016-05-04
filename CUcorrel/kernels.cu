@@ -1,7 +1,9 @@
 #include <iostream>
+#include <stdio.h>
+
 #include "CUcorrel.h"
 #include "util.h"
-#include <stdio.h>
+#include "reduction.cuh"
 
 #include "bicubic.cu"
 
@@ -51,43 +53,6 @@ __global__ void lsq(float* out, float* devA, float* devB, const uint length)
   out[id] = (devA[id]-devB[id])*(devA[id]-devB[id]);
 }
 
-__device__ void warpReduce(volatile float* sh_data, const uint tid)
-{
-  sh_data[tid] += sh_data[tid+32];
-  sh_data[tid] += sh_data[tid+16];
-  sh_data[tid] += sh_data[tid+8];
-  sh_data[tid] += sh_data[tid+4];
-  sh_data[tid] += sh_data[tid+2];
-  sh_data[tid] += sh_data[tid+1];
-}
-
-__global__ void reduce(float* data, const uint size)
-{
-  //Réduit relativement efficacement en sommant tout un tableau et en écrivant les somme restantes de chaque bloc au début du tableau (à appeler plusieurs fois pour sommer plus de 1024 éléments).
-/*
-TODO: Rendre possible le cas size != 2^k
-voir le lien ci dessous:
-http://docs.nvidia.com/cuda/samples/6_Advanced/reduction/doc/reduction.pdf
-*/
-  uint id = 2*blockDim.x*blockIdx.x+threadIdx.x;
-  uint tid = threadIdx.x;
-  if(id > 2*size) //Si appelé plus que nécessaire, quitter
-  {return;}
-  __shared__ float array[BLOCKSIZE]; //Contient les éléments de chaque bloc, utilisé pour stocker les valeurs temporaires
-  array[tid] = data[id] + data[BLOCKSIZE+id]; //Chaque thread copie une valeur
-  __syncthreads(); // On attend tout le monde pour être sûr d'avoir toutes les valeurs écrites
-  for(uint s = blockDim.x/2; s > 32; s >>= 1) //On divise par 2 le nombre de sommes à effectuer à chaque fois -> à optimiser car une partie des threads tourne dans le vide...
-  {
-    if(tid < s)
-    {array[tid] += array[tid+s];} //On effectue ladite somme...
-  __syncthreads(); // On attend que tout le monde ai fini avant de réitérer
-  }
-  if(tid < 32)
-  {warpReduce(array,tid);}
-  if(tid == 0)
-  {data[blockIdx.x] = array[0];} // Le thread de tête écrit le résultat de son bloc dans le tableau
-}
-
 __global__ void gradient(cudaTextureObject_t tex, float* gradX, float* gradY, uint w, uint h)
 {
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
@@ -105,11 +70,7 @@ __global__ void gradient(cudaTextureObject_t tex, float* gradX, float* gradY, ui
 float residuals(float* devData1, float* devData2, uint size)
 {
   lsq<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp, devData1, devData2, size);
-  while(size>1)
-  {
-    reduce<<<(size+2*BLOCKSIZE-1)/2/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devTemp,size);
-    size = (size+2*BLOCKSIZE-1)/2/BLOCKSIZE;
-  }
+  sum(devTemp,size);
   float out;
   cudaMemcpy(&out,devTemp,sizeof(float),cudaMemcpyDeviceToHost);
   return out;
@@ -157,14 +118,8 @@ void gradientDescent(cudaTextureObject_t* texG, float* devOut, float* devDef, fl
   dim3 blocks(min(w,32),min(h,32));
   dim3 grid((w+31)/32,(h+31)/32);
   gdSum<<<grid,blocks>>>(devTemp, texG[p], devOut, devDef, devParam, devFields+w*h*p, w, h, p);
-  uint blocksize;
-    while(size>1)
-    {
-      blocksize = (size+2*BLOCKSIZE-1)/(2*BLOCKSIZE);
-      reduce<<<blocksize,min(size,BLOCKSIZE)>>>(devTemp,size);
-      size = blocksize;
-    }
-    cudaMemcpy(devVect+p,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
+  sum(devTemp,w*h);
+  cudaMemcpy(devVect+p,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
   }
 }
 
@@ -208,14 +163,6 @@ void genMip(cudaTextureObject_t tex, cudaArray* array, uint w, uint h)
   //cout << "Génération du mipmap de taille " << w << ", " << h << endl;
   mipKernel<<<gridsize,blocksize>>>(tex, devTemp, w, h);
   cudaMemcpyToArray(array,0,0,devTemp,w*h*sizeof(float),cudaMemcpyDeviceToDevice);
-  /* Vérif:
-  float* test = (float*)malloc(w*h*sizeof(float));
-  cudaMemcpy(test,devTemp,w*h*sizeof(float),cudaMemcpyDeviceToHost);
-  char oAddr[20];
-  sprintf(oAddr,"mip%d.csv",w);
-  writeFile(oAddr,test,1,0,w,h);
-  free(test);
-  */
 }
 
 __global__ void resample(float* out, float* in, uint w)
@@ -254,14 +201,7 @@ void makeHessian(float* devH, cudaTextureObject_t* texG)
     for(int j = 0; j <= i; j++)
     {
       evalProduct<<<gridsize,blocksize>>>(devTemp,texG[i],texG[j], WIDTH, HEIGHT);
-      uint size = IMG_SIZE;
-      uint blocksize;
-      while(size>1)
-      {
-        blocksize = (size+2*BLOCKSIZE-1)/(2*BLOCKSIZE);
-        reduce<<<blocksize,min(size,BLOCKSIZE)>>>(devTemp,size);
-        size = blocksize;
-      }
+      sum(devTemp,IMG_SIZE);
       scalMul<<<1,1>>>(devTemp,1.f/IMG_SIZE);
       cudaMemcpy(devH+PARAMETERS*i+j,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
       if(j != i)

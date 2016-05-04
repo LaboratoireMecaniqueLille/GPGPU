@@ -273,14 +273,8 @@ int main(int argc, char** argv)
       gettimeofday(&t0,NULL);
       cout << "Boucle n°" << i+1 << endl;
       cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
-      cout << "Paramètres réels: ";
-      for(int j = 0; j < PARAMETERS;j++){cout << paramI[j] << ", ";}
-      cout << endl;
       cout << "Paramètres calculés: ";
       for(int j = 0; j < PARAMETERS;j++){cout << param[j] << ", ";}
-      cout << endl;
-      cout << "Différence: ";
-      for(int j = 0; j < PARAMETERS;j++){cout << param[j]-paramI[j] << ", ";}
       cout << endl;
 
       // --------- Interpolation ----------
