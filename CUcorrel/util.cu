@@ -106,13 +106,13 @@ void readFile(char* address, float* data, float norm)
   free(image);
 }
 
-void writeFile(char* address, float* data, float offset, uint w, uint h)
+void writeFile(char* address, float* data, float offset, uint w, uint h, float mul)
 {
   unsigned char *image = (unsigned char*)malloc(4*w*h*sizeof(unsigned char));
   unsigned char val = 0;
   for(int i = 0; i < w*h; i++)
   {
-    val = max(0.f,min(255.f,data[i]+offset));
+    val = max(0.f,min(255.f,mul*data[i]+offset));
     image[4*i] = val;
     image[4*i+1] = val;
     image[4*i+2] = val;
