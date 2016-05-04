@@ -10,6 +10,12 @@ void writeDiffFile(char*, float*, float*, float, uint, uint);
 
 class MemMap
 {
+  /*
+    Classe pour obtenir l'addresse d'un élément dans un tableau 1D en précisant ses coordonnées dans un sous élément
+    dImg: les dimensions de l'image globale
+    dTile: Les dimensions du sous-élément
+    tOffset: Les coordonées de l'origine du sous élément dans l'image globale.
+  */
   public:
   MemMap(uint2, uint2, uint2);
   uint tileToImg(uint, uint);

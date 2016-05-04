@@ -13,6 +13,7 @@ using namespace std;
 
 MemMap::MemMap(uint2 i_dImg, uint2 i_dTile, uint2 i_tOffset)
 {
+  //Constructeur: on récupère les données d'init et on calcule les coeffs utiles pour tileToImg
   tOffset = i_tOffset;
   dImg = i_dImg;
   dTile = i_dTile;
@@ -22,11 +23,13 @@ MemMap::MemMap(uint2 i_dImg, uint2 i_dTile, uint2 i_tOffset)
 
 uint MemMap::tileToImg(uint x, uint y)
 {
+  //Retourne l'adresse de l'élément dans l'image globale à partir des coordonées x,y dans le sous-élément
   return a+x+b*y;
 }
 
 uint MemMap::imgToTile(uint x, uint y)
 {
+  //Pour récupérer l'adresse dans le sous élément à partir des coordonnées globales (revoie 0 si hors du sous-élément)
   if(x < tOffset.x || x >= dTile.x+tOffset.x)
   {
     cout << "Coordonnée X hors de la tuile !" << endl;
@@ -39,11 +42,6 @@ uint MemMap::imgToTile(uint x, uint y)
   }
   return x-tOffset.x+dTile.y*(y-tOffset.y);
 }
-
-
-
-
-
 
 void printMat(float* data,uint x,uint y, uint step)
 {
@@ -157,7 +155,6 @@ void writeDiffFile(char* address, float* data1, float* data2, float gain, uint w
     image[4*i+1] = val+g;
     image[4*i+2] = val;
     image[4*i+3] = 255;
-    
   }
   if(lodepng_encode32_file(address, image, w, h))
   {
@@ -203,7 +200,6 @@ void checkError(cusolverStatus_t cuSolverStatus)
     }
     cout << endl;
     exit(-1);
-
   }
 }
 
