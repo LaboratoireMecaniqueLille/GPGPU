@@ -198,18 +198,6 @@ int main(int argc, char** argv)
   }
 */
 
-/*
-  // ---------- Calcul de l'image à recaler ----------
-  deform2D<<<gridsize[0],blocksize[0]>>>(tex[0], devDef[0],devFields[0],devParam,WIDTH,HEIGHT);
-
-  // ---------- Bruitage de l'image déformée ---------
-  for(int i = 0; i < WIDTH*HEIGHT ; i++)
-  { 
-    orig[i] = (float)rand()/RAND_MAX*10.f-5.f;
-  }
-  cudaMemcpy(devOut,orig,taille,cudaMemcpyHostToDevice); // Pour ajouter le bruit...
-  addVec<<<WIDTH*HEIGHT/1024,1024>>>(devDef[0],devOut); // ..directement sur le device
-*/
   // ---------- Lecture de l'image déformée  -----------
   readFile("img_d.png",orig, 256);
   cudaMemcpy(devDef[0],orig,IMG_SIZE*sizeof(float),cudaMemcpyHostToDevice);
@@ -332,12 +320,21 @@ for(tile.x = 1; tile.x < NTILES-1; tile.x++) // Double boucle sur les tuiles (Ne
 
 /*
       // --------- [Facultatif] Pour enregistrer en .png l'image à chaque itération ----------
-      //if(l==0 && i == 0)
+      cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
+      sprintf(oAddr,"out/devOut%d-%d.png",LVL-l,i);
+      writeFile(oAddr,orig,0,WIDTH/div,HEIGHT/div);
+*/
+
+/*
+      // --------- [Facultatif] Pour enregistrer en .png la différence de l'image ----------
+      float def[WIDTH*HEIGHT];
+      if(i == 0)
       {
       cudaMemcpy(orig,devOut,T_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
       sprintf(oAddr,"out/devOutT%d-%dl%di%d.png",tile.y,tile.x,LVL-l,i);
       writeFile(oAddr,orig,0,T_WIDTH/div,T_HEIGHT/div);
       }
+
 */
 
 
