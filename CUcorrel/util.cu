@@ -6,44 +6,7 @@
 #include "CUcorrel.h"//BLOCKSIZE
 #include "lodepng/lodepng.h"
 
-#include "util.h"
-
 using namespace std;
-
-
-MemMap::MemMap(uint2 i_dImg, uint2 i_dTile, uint2 i_tOffset)
-{
-  tOffset = i_tOffset;
-  dImg = i_dImg;
-  dTile = i_dTile;
-  a = tOffset.x+dImg.x*tOffset.y;
-  b = dImg.y;
-}
-
-uint MemMap::tileToImg(uint x, uint y)
-{
-  return a+x+b*y;
-}
-
-uint MemMap::imgToTile(uint x, uint y)
-{
-  if(x < tOffset.x || x >= dTile.x+tOffset.x)
-  {
-    cout << "Coordonnée X hors de la tuile !" << endl;
-    return 0;
-  }
-  if(y < tOffset.y || x >= dTile.y+tOffset.y)
-  {
-    cout << "Coordonnée Y hors de la tuile !" << endl;
-    return 0;
-  }
-  return x-tOffset.x+dTile.y*(y-tOffset.y);
-}
-
-
-
-
-
 
 void printMat(float* data,uint x,uint y, uint step)
 {
@@ -78,6 +41,19 @@ double timeDiff(struct timeval t1, struct timeval t2) //Retourne la différence 
   return (t2.tv_sec-t1.tv_sec)*1000+(t2.tv_usec-t1.tv_usec)/1000.f;
 }
 
+
+float GPUsum(float* devData, uint size)
+{
+
+  while(size>1)
+  {
+    reduce<<<(size+BLOCKSIZE-1)/BLOCKSIZE,min(size,BLOCKSIZE)>>>(devData,size);
+    size = (size+BLOCKSIZE-1)/BLOCKSIZE;
+  }
+  float out;
+  cudaMemcpy(&out,devData,sizeof(float),cudaMemcpyDeviceToHost);
+  return out;
+}
 
 void readParam(char** argv,float* values, int len)
 {
