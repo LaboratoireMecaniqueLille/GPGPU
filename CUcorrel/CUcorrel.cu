@@ -340,7 +340,7 @@ for(tile.x = 1; tile.x < NTILES-1; tile.x++) // Double boucle sur les tuiles (Ne
 
       // ------------ Calcul de la direction de recherche ------------
       //gettimeofday(&t1,NULL);
-      gradientDescent(texG[l], devOut, devTileDef, devVec, devParam, devFields[l], T_WIDTH/div, T_HEIGHT/div); // -- << A MODIFIER ! Ne s'applique pas à la tuile, n'a aucun sens pour le moment !
+      gradientDescent(texG[l], devOut, devTileDef, devVec, T_WIDTH/div, T_HEIGHT/div, tile); // -- << A MODIFIER ! Ne s'applique pas à la tuile, n'a aucun sens pour le moment !
       cudaDeviceSynchronize();
       //gettimeofday(&t2,NULL);
 

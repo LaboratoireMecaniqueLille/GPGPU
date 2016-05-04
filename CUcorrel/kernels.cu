@@ -117,23 +117,23 @@ void makeGArray(cudaArray* array, float2* U, float* gradX, float* gradY, uint w,
   cudaMemcpyToArray(array, 0, 0, devTemp, w*h*sizeof(float), cudaMemcpyDeviceToDevice);
 }
 
-__global__ void gdSum(float* out, cudaTextureObject_t texG, float* orig, float* def, float* param, float2* field, uint w, uint h, uint p)
+__global__ void gdSum(float* out, cudaTextureObject_t texG, float* orig, float* def, uint w, uint h, int2 tile)
 {
   uint idx = blockIdx.x*blockDim.x+threadIdx.x;
   uint idy = blockIdx.y*blockDim.y+threadIdx.y;
   uint id = w*idy+idx;
-  //out[id] = (orig[id]-def[id])*tex2D<float>(texG,(idx-param[p]*field[id].x)/w,(idy-param[p]*field[id].y)/h)/(w*h);
-  out[id] = max(-100.f,min(100.f,(orig[id]-def[id])))*tex2D<float>(texG,(idx-param[p]*field[id].x)/w,(idy-param[p]*field[id].y)/h)/(w*h); // Pour limiter l'impact des endroits où l'image est complètement à côté.
+  out[id] = (orig[id]-def[id])*tex2D<float>(texG,(tile.x+(float)idx/w)/NTILES,(tile.y+(float)idy/h)/NTILES)/(w*h);
+  //out[id] = max(-100.f,min(100.f,(orig[id]-def[id])))*tex2D<float>(texG,(tile.x+(float)idx/w)/NTILES,(tile.y+(float)idy/h)/NTILES)/(w*h); // Pour limiter l'impact des endroits où l'image est complètement à côté.
 }
 
-void gradientDescent(cudaTextureObject_t* texG, float* devOut, float* devDef, float* devVect, float* devParam, float2* devFields, uint w, uint h)
+void gradientDescent(cudaTextureObject_t* texG, float* devOut, float* devDef, float* devVect, uint w, uint h, int2 tile)
 {
   for(uint p = 0; p < PARAMETERS; p++)
   {
   uint size = w*h;
   dim3 blocks(min(w,32),min(h,32));
   dim3 grid((w+31)/32,(h+31)/32);
-  gdSum<<<grid,blocks>>>(devTemp, texG[p], devOut, devDef, devParam, devFields+w*h*p, w, h, p);
+  gdSum<<<grid,blocks>>>(devTemp, texG[p], devOut, devDef,  w, h, tile);
   sum(devTemp,w*h);
   cudaMemcpy(devVect+p,devTemp,sizeof(float),cudaMemcpyDeviceToDevice);
   }
