@@ -20,6 +20,8 @@ int main(int argc, char** argv)
   int nbIter=10; // Le nombre d'itérations
   char iAddr[10] = "img.png"; // Le nom du fichier à ouvrir
   float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
+  dim3 blocksize[LVL]; // Pour l'appel aux kernels sur toute l'image (une pour chaque étage)
+  dim3 gridsize[LVL];
   char oAddr[25]; // pour écrire les noms des fichiers de sortie
   float param[PARAMETERS] = {0}; // Stocke les paramètres calculés
   float res; // Le résidu 
@@ -27,10 +29,6 @@ int main(int argc, char** argv)
   float vec[PARAMETERS]; // Pour stocker sur l'hôte les paramètres calculés
   int c = 0; // Pour compter les boucles et quitter si on ajoute trop
   uint div = 1; // Pour diviser la taille dans les boucles
-  dim3 blocksize[LVL]; // Pour l'appel aux kernels sur toute l'image (une pour chaque étage)
-  dim3 gridsize[LVL];
-  dim3 blocksize_t[LVL];
-  dim3 gridsize_t[LVL];
   for(int i = 0; i < LVL; i++)
   {
     blocksize[i].x = min(32,WIDTH/div);
@@ -39,12 +37,6 @@ int main(int argc, char** argv)
     gridsize[i].x = (WIDTH/div+31)/32;
     gridsize[i].y = (HEIGHT/div+31)/32;
     gridsize[i].z = 1;
-    blocksize_t[i].x = min(32,T_WIDTH/div);
-    blocksize_t[i].y = min(32,T_HEIGHT/div);
-    blocksize_t[i].z = 1;
-    gridsize_t[i].x = (T_WIDTH/div+31)/32;
-    gridsize_t[i].y = (T_HEIGHT/div+31)/32;
-    gridsize_t[i].z = 1;
     div *= 2;
   }
   dim3 tailleMat(PARAMETERS,PARAMETERS); // La taille de la hessienne
@@ -54,14 +46,13 @@ int main(int argc, char** argv)
   float *devGradY; // .. à Y
   float2 *devFields[LVL]; // Contient les PARAMETERS champs de déplacements élémentaires à la suite dont on cherche l'influence par autant de paramètres
   float *devParam; // Contient la valeur actuelle calculée des paramètres
-  float *devDef[LVL]; // Image déformée à recaler
+  float *devDef[LVL]; // Image déformée à recaler (ici calculée à partir de l'image d'origine)
   float *devOut; // L'image interpolée à chaque itération
   float *devMatrix; // La hessienne utilisée pour la méthode de Newton
   float *devInv;  // L'inverse de la Hessienne
   float *devVec; // Vecteur pour stocker les PARAMETERS valeurs du gradient à chaque itération
   float *devVecStep; // Multiplie terme à terme la direction avant le l'ajouter aux paramètres
   float *devVecOld; // Pour stocker le vecteur précédent et le restaurer si nécessaire
-  float *devTileDef; // Pour stocker la tuile de l'image déformée à chaque fois
 
   srand(time(NULL)); // Seed pour générer le bruit avec rand()
 
@@ -84,7 +75,6 @@ int main(int argc, char** argv)
   cudaMalloc(&devVec,PARAMETERS*sizeof(float));
   cudaMalloc(&devVecStep,PARAMETERS*sizeof(float));
   cudaMalloc(&devVecOld,PARAMETERS*sizeof(float));
-  cudaMalloc(&devTileDef,T_SIZE*sizeof(float));
   initCuda();
   if(cudaGetLastError() == cudaErrorMemoryAllocation)
   {cout << "Erreur d'allocation (manque de mémoire graphique ?)" << endl;exit(-1);}
@@ -159,7 +149,7 @@ int main(int argc, char** argv)
   cout << "OK" << endl;
   */
 
-  // --------- Calcul des textures G ----------
+  // --------- Calcul des matrices G ----------
   gettimeofday(&t1,NULL);
   cudaTextureObject_t texG[LVL][PARAMETERS]={{0}};
   cudaArray *Garray[LVL][PARAMETERS];
@@ -261,62 +251,44 @@ int main(int argc, char** argv)
   printMat(test,PARAMETERS,PARAMETERS);
   //*/
 
-
-
-  uint divinit = div/2; // On se sert de la dernière valeur de div (cela equivaut à divinit = pow(LVL-1,2) )
-
-int2 tile = make_int2(8,8);;
-
-for(tile.x = 1; tile.x < NTILES-1; tile.x++) // Double boucle sur les tuiles (Ne parcoure pas les bordures !)
-{
-  for(tile.y = 1; tile.y < NTILES-1; tile.y++)
-  {
-  div = divinit;
-
   // ---------- Écriture des paramètres initiaux ----------
   for(int i = 0; i < PARAMETERS; i++)
   param[i] = 0;
   //readParam(argv,param); // Pour tester des valeurs de paramètres par défaut sans recompiler
   cudaMemcpy(devParam, param, PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
-    cout << "\n\n### Tile " << tile.x+1 << "/" << NTILES << ", " << tile.y+1 << "/" << NTILES  << " ###\n" << endl;
 
+  
+  div /= 2; // On se sert de la dernière valeur de div (cela equivaut à div = pow(LVL-1,2) )
   // ---------- La boucle principale ---------
   for(int l = LVL-1; l >= 0; l--) // Boucler sur les étages de la pyramide
   {
-    cout << " #  Niveau n°" << LVL-l << " #\n" << endl;
-    cout << "Taille de l'image: " << WIDTH/div << "x" << HEIGHT/div << endl;
-    cout << "Taille de la tuile: " << T_WIDTH/div << "x" << T_HEIGHT/div << endl;
+    cout << " ###  Niveau n°" << l << " ###\n" << endl;
+    cout << " Taille de l'image: " << WIDTH/div << "x" << HEIGHT/div << endl;
     gettimeofday(&t00,NULL);
-
-    // ------------ Copie dans un tableau de la taille de la tuile -------------
-    MemMap map(make_uint2(WIDTH/div,HEIGHT/div),make_uint2(T_WIDTH/div,T_HEIGHT/div),make_uint2(T_WIDTH/div*tile.x,T_HEIGHT/div*tile.y));
-    for(int k = 0; k < T_HEIGHT/div; k++)
-    {
-      cudaMemcpy(devTileDef+k*T_WIDTH/div,devDef[l]+map.tileToImg(0,k),T_WIDTH/div*sizeof(float),cudaMemcpyDeviceToDevice);
-    }
-
-
-
     res = 10000000000; // -- On remet une valeur hénaurme pour être sûr d'avoir une décroissante à la première itération
 
     for(int i = 0;i < nbIter; i++) // Itérer sur cet étage (en pratique, on fait rarement toutes les itérations)
     {
       // ---------- Infos -------
-      /*
       gettimeofday(&t0,NULL);
       cout << "Boucle n°" << i+1 << endl;
       cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
+      cout << "Paramètres réels: ";
+      for(int j = 0; j < PARAMETERS;j++){cout << paramI[j] << ", ";}
+      cout << endl;
       cout << "Paramètres calculés: ";
       for(int j = 0; j < PARAMETERS;j++){cout << param[j] << ", ";}
       cout << endl;
-      */
+      cout << "Différence: ";
+      for(int j = 0; j < PARAMETERS;j++){cout << param[j]-paramI[j] << ", ";}
+      cout << endl;
 
       // --------- Interpolation ----------
       gettimeofday(&t1,NULL);
-      deform2D_t<<<gridsize_t[l],blocksize_t[l]>>>(tex[l], devOut, devFields[l], devParam,div,tile); //--
+      deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div); //--
       cudaDeviceSynchronize();
       gettimeofday(&t2, NULL);
-      //cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
+      cout << "\nInterpolation: " << timeDiff(t1,t2) << "ms." << endl;
 
 /*
       // --------- [Facultatif] Pour enregistrer en .png l'image à chaque itération ----------
@@ -330,87 +302,60 @@ for(tile.x = 1; tile.x < NTILES-1; tile.x++) // Double boucle sur les tuiles (Ne
       float def[WIDTH*HEIGHT];
       if(i == 0)
       {
-      cudaMemcpy(orig,devOut,T_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
-      sprintf(oAddr,"out/devOutT%d-%dl%di%d.png",tile.y,tile.x,LVL-l,i);
-      writeFile(oAddr,orig,0,T_WIDTH/div,T_HEIGHT/div);
+        cudaMemcpy(def,devDef[l],IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
       }
-
+      cudaMemcpy(orig,devOut,IMG_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
+      sprintf(oAddr,"out/diffDevOut%d-%d.png",LVL-l,i);
+      writeDiffFile(oAddr,orig,def,4.f,WIDTH/div,HEIGHT/div);
 */
 
-
       // ------------ Calcul de la direction de recherche ------------
-      //gettimeofday(&t1,NULL);
-      gradientDescent(texG[l], devOut, devTileDef, devVec, devParam, devFields[l], T_WIDTH/div, T_HEIGHT/div); // -- << A MODIFIER ! Ne s'applique pas à la tuile, n'a aucun sens pour le moment !
+      gettimeofday(&t1,NULL);
+      gradientDescent(texG[l], devOut, devDef[l], devVec, devParam, devFields[l], WIDTH/div, HEIGHT/div); //--
       cudaDeviceSynchronize();
-      //gettimeofday(&t2,NULL);
+      gettimeofday(&t2,NULL);
 
-      // ----------- [Facultatif] Affiche le gradient et le temps de calcul -------------
-      /*
+      // ----------- Affiche le gradient et le temps de calcul -------------
       cout << "Calcul des gradients des paramètres: " << timeDiff(t1,t2) << " ms." << endl;
       cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
       cout << "Gradient des paramètres:" << endl;
       printMat(vec,PARAMETERS,1);
-      */
       
       // ---------- Methode de Newton (la matrice est déjà inversée) -------------
-      //gettimeofday(&t1,NULL);
+      gettimeofday(&t1,NULL);
       myDot<<<1,PARAMETERS,PARAMETERS*sizeof(float)>>>(devInv,devVec,devVec); //--
-      scalMul<<<1,PARAMETERS>>>(devVec,2.f); // Pour un pas fixe
-      //cudaDeviceSynchronize();
-      //gettimeofday(&t2,NULL);
+      //scalMul<<<1,PARAMETERS>>>(devVec,2.f); // Pour un pas fixe
+      cudaDeviceSynchronize();
+      gettimeofday(&t2,NULL);
 
-      // ----------- [Facultatif] Affiche le vecteur que l'on va ajouter aux paramètres -----------
-      /*
+      // ----------- Affiche le vecteur que l'on va ajouter aux paramètres -----------
       cout << "Mise à jour des valeurs: " << timeDiff(t1,t2) << " ms." << endl;
       cudaMemcpy(vec,devVec,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
       cout << "Direction:" << endl;
       printMat(vec,PARAMETERS,1);
-      */
-      c = 0; // --
-      if(abs(vec[0]) > 20)
-      {
-        cout << "WTF ?" << endl;
-        c = 10;
-        break;
-      }
 
       // ------------ Ajouter tant que la fonctionnelle diminue ---------
+      c = 0; // --
       gettimeofday(&t1,NULL);
       while(c<10)
       {
         vecCpy<<<1,PARAMETERS>>>(devVecOld,devParam); //--
         scalMul<<<1,PARAMETERS>>>(devVec,1.f+.15f*c); // -- En augmentant sa taille à chaque fois pour accélérer la convergence
         addVec<<<1,PARAMETERS>>>(devParam,devVec); // --
-        deform2D_t<<<gridsize_t[l],blocksize_t[l]>>>(tex[l], devOut, devFields[l], devParam,div,tile); //--
+        deform2D<<<gridsize[l],blocksize[l]>>>(tex[l], devOut, devFields[l], devParam,WIDTH/div,HEIGHT/div); //--
         oldres = res; // --
-        cudaDeviceSynchronize();
-        res = residuals(devOut, devTileDef, T_SIZE/div/div)/T_SIZE*div*div; //--
-        cudaDeviceSynchronize();
+        res = residuals(devOut, devDef[l], IMG_SIZE/div/div)/IMG_SIZE*div*div; //--
         c++; // -- (quelle ironie...)
-        //cout << "Ajout: " << c << endl;
-        //cout << "Résidu: "<< res <<  endl << endl;
-
-
-/*
-      // --------- [Facultatif] Pour enregistrer en .png la différence de l'image ----------
-      float def[T_WIDTH*T_HEIGHT];
-      cudaMemcpy(orig,devOut,T_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
-      cudaMemcpy(def,devTileDef,T_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
-      cudaDeviceSynchronize();
-
-      sprintf(oAddr,"out/diffDevOutT%d-%dL%di%da%d.png",tile.y,tile.x,LVL-l,i,c);
-      //writeFile(oAddr,orig,0,T_WIDTH/div,T_HEIGHT/div);
-      writeDiffFile(oAddr,orig,def,4.f,T_WIDTH/div,T_HEIGHT/div);
-*/
-
+        cout << "Ajout: " << c << endl;
+        cout << "Résidu: "<< res <<  endl << endl;
         if(res >= oldres) // --
         {
+          gettimeofday(&t2,NULL);
+          cout << res << " >= " << oldres << "! On annule" << endl;
           vecCpy<<<1,PARAMETERS>>>(devParam,devVecOld); // --
           res = oldres; // --
-          gettimeofday(&t2,NULL);
-          //cout << res << " >= " << oldres << "! On annule" << endl;
-          //cout << c << " ajouts successifs: " << timeDiff(t1,t2) << " ms." << endl;
-          //cout << "Exécution de toute la boucle: " << timeDiff(t0,t2) << " ms." << endl;
+          cout << c << " ajouts successifs: " << timeDiff(t1,t2) << " ms." << endl;
+          cout << "Exécution de toute la boucle: " << timeDiff(t0,t2) << " ms." << endl;
           break; // --
         }
       }
@@ -420,33 +365,13 @@ for(tile.x = 1; tile.x < NTILES-1; tile.x++) // Double boucle sur les tuiles (Ne
       if(c<=1) // --
       {
         cout << "On n'avance plus... Étage suivant !" << endl;
-        cout << "Résidu: " << res << endl;
-        cudaMemcpy(param,devParam,PARAMETERS*sizeof(float),cudaMemcpyDeviceToHost);
-        cout << "Paramètres calculés: ";
-        for(int j = 0; j < PARAMETERS;j++){cout << param[j] << ", ";}
-        cout << endl;
-        
-//*
-      // --------- [Facultatif] Pour enregistrer en .png la différence de l'image ----------
-      float def[T_WIDTH*T_HEIGHT];
-      cudaMemcpy(orig,devOut,T_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
-      cudaMemcpy(def,devTileDef,T_SIZE/div/div*sizeof(float),cudaMemcpyDeviceToHost);
-      cudaDeviceSynchronize();
-
-      sprintf(oAddr,"out/diffDevOutT%d-%d.png",tile.y,tile.x);
-      //writeFile(oAddr,orig,0,T_WIDTH/div,T_HEIGHT/div);
-      writeDiffFile(oAddr,orig,def,4.f,T_WIDTH/div,T_HEIGHT/div);
-//*/
+        gettimeofday(&t2,NULL);
         break; // --
       }
     }
-    gettimeofday(&t2,NULL);
     cout << "Exécution de tout l'étage: " << timeDiff(t00,t2) << " ms." << endl;
     div /= 2; // --
   }
-
-
-  }} // Fin de la double boucle
 
   // ---------- Vérification d'erreur éventuelle ----------
   err = cudaGetLastError();
@@ -467,6 +392,7 @@ for(tile.x = 1; tile.x < NTILES-1; tile.x++) // Double boucle sur les tuiles (Ne
   {
     cudaFree(devDef[i]);
     cudaFree(devFields[i]);
+    //cudaFree(devG[i]);
   }
   cudaFree(devOut);
   cudaFree(devMatrix);
