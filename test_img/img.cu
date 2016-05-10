@@ -63,16 +63,8 @@ void Image::interpLinear(float* devOut, float2* devPoints, uint N)
   int gridsize = (N+1023)/1024;
   int blocksize = min(N,1024);
   normalize<<<gridsize,blocksize>>>(devPoints, m_texMin, m_texMax, m_w, m_h, N); // Normalise les points et applique la transformation de la tuile vers la texture
-
-//-----TEST-----
-  float2 *test = new float2 [m_w*m_h];
-  cudaMemcpy(test,devPoints,m_w*m_h*sizeof(float),cudaMemcpyDeviceToHost);
-  cout << test[500*2048+500].x << endl;
-//---------------
-
-  delete test;
-
-  interpolate<<<gridsize,blocksize>>>(devOut, m_tex, devPoints,N);
+  
+  interpolate<<<gridsize,blocksize>>>(devOut, m_tex, devPoints, N);
 }
 
 Image Image::makeTile(uint x, uint y, uint w, uint h)
@@ -162,7 +154,4 @@ void makeDisplacement(float2* devDisp, float param, float2* devField, uint w, ui
   dim3 grid((w+31)/32,(h+31)/32);
   dim3 block(min(w,32),min(h,32));
   devMakeDisplacement<<<grid,block>>>(devDisp, param, devField, w, h);
-  
-  float2 *test = new float2 [w*h];
-  cudaMemcpy(test,devDisp,w*h*sizeof(float2),cudaMemcpyDeviceToHost);
 }

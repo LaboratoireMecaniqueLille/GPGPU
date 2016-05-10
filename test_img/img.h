@@ -2,10 +2,6 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-#define INTERP_NEAREST 1
-#define INTERP_BILINEAR 2
-#define INTERP_BICUBIC 3
-
 typedef unsigned int uint;
 
 __global__ void interpolate(float* out, cudaTextureObject_t tex, float2* points, uint N);

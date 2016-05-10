@@ -59,24 +59,29 @@ int main(int argc, char** argv)
   cudaMalloc(&devOut, w*h*sizeof(float));
   float2 *devU;
   cudaMalloc(&devU, w*h*sizeof(float2));
-  float2 *U = new float2 [w*h];
-  for(int i = 0; i < w; i++)
+
+  uint tile_w = 1024;
+  uint tile_h = 1024;
+
+  float2 *U = new float2 [tile_w*tile_h];
+  for(int i = 0; i < tile_w; i++)
   {
-    for(int j = 0; j < h; j++)
+    for(int j = 0; j < tile_h; j++)
     {
-      U[i+w*j] = make_float2(2.f*i/w-1.f,0.f);
+      U[i+tile_w*j] = make_float2(2.f*i/tile_w-1.f,0.f);
     }
   }
-  cudaMemcpy(devU,U,w*h*sizeof(float2),cudaMemcpyHostToDevice);
+  
+  cudaMemcpy(devU,U,tile_w*tile_h*sizeof(float2),cudaMemcpyHostToDevice);
   float k = 15.f;
   
   float2 *devDisp;
-  cudaMalloc(&devDisp, w*h*sizeof(float2));
+  cudaMalloc(&devDisp, tile_w*tile_h*sizeof(float2));
 
-  makeDisplacement(devDisp,k,devU,w,h);
-  img.interpLinear(devOut,devDisp,w*h);
+  makeDisplacement(devDisp,k,devU,tile_w,tile_h);
+  tile.interpLinear(devOut,devDisp,tile_w*tile_h);
   cudaDeviceSynchronize();
-  Image out(w,h,devOut);
+  Image out(tile_w,tile_h,devOut);
   out.writeToFile("out.png");
 
 
