@@ -143,13 +143,13 @@ void writeDiffFile(char* address, float* data1, float* data2, float gain, uint w
     image[4*i+3] = 255;
     */
 
-    // Un peu plus avancé: affiche l'image déformée avec du rouge là ou d2 > d1 et du vert si d2 < d1
+    // Un peu plus avancé: affiche l'image déformée avec une couche rouge là où d2 > d1 et verte là où d2 < d1 et d'opacité proportionelle à la différence
     diff = (data1[i] - data2[i])/256.f;
-    r = min(255.f/256.f,-min(0.f,diff*gain));
-    g = min(255.f/256.f,-min(0.f,-diff*gain));
-    val = max(0.f,min(255.f,(data1[i])));
-    val *= (1-r)*(1-g);
-    r*=256.f;
+    r = min(255.f/256.f,-min(0.f,diff*gain)); // Clamping entre 0 et 1 par 2 min
+    g = min(255.f/256.f,-min(0.f,-diff*gain)); // idem (au moins l'un des deux vaut 0)
+    val = max(0.f,min(255.f,(data1[i]))); // Le calque de l'image
+    val *= (1-r)*(1-g); // Son poids réel sur l'image finale
+    r*=256.f; // On norme r et g
     g*=256.f;
     image[4*i] = val+r;
     image[4*i+1] = val+g;
