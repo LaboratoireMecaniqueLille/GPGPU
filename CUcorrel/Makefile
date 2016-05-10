@@ -22,7 +22,7 @@ reduction.o: CUcorrel.h
 	nvcc -c reduction.cu
 
 clean: 
-	rm -rf *.o
+	rm -rf CUcorrel *.o
 
 run: CUcorrel
 	./CUcorrel
