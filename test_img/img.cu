@@ -3,13 +3,21 @@
 
 using namespace std;
 
-Image::Image(uint w, uint h, float* pointer) : m_w(w), m_h(h), m_stride(w), m_pointer(pointer), m_offset(0)
+Image::Image(uint w, uint h, float* pointer) : 
+m_w(w), m_h(h), m_stride(w), m_pointer(pointer), 
+m_offset(0), m_tex(0), 
+m_texMin(make_float2(0.f,0.f)), m_texMax(make_float2(1.f,1.f))
 {
 }
 
-Image::Image(uint w, uint h, float* pointer, uint stride, uint offset) : m_w(w), m_h(h), m_stride(stride), m_pointer(pointer), m_offset(offset)
+Image::Image(uint w, uint h, float* pointer, uint stride, uint offset,
+ float2 texMin, float2 texMax) : 
+m_w(w), m_h(h), m_stride(stride), 
+m_pointer(pointer), m_offset(offset), 
+m_texMin(texMin), m_texMax(texMax)
 {
 }
+
 
 float Image::getVal(uint x, uint y)
 {
@@ -35,7 +43,9 @@ Image Image::makeTile(uint x, uint y, uint w, uint h)
     cout << "makeTile impossible: sort de l'image d'origine !" << endl;
     exit(-1);
   }
-  Image ret(w,h,m_pointer,m_stride,m_offset+x+y*m_stride);
+  float2 texMin = get_gtnc((float)x/m_w,(float)y/m_h);
+  float2 texMax = get_gtnc((float)(x+w)/m_w,(float)(y+h)/m_h);
+  Image ret(w,h,m_pointer,m_stride,m_offset+x+y*m_stride, texMin, texMax);
   return ret;
 }
 
@@ -62,4 +72,14 @@ void Image::writeToFile(const char* address)
     exit(-1);
   }
   delete image;
+}
+
+float2 Image::get_gtnc(float2 coord)
+{
+  return make_float2((m_texMax.x-m_texMin.y)*coord.x+m_texMin.x,(m_texMax.y-m_texMin.y)*coord.y+m_texMin.y);
+}
+
+float2 Image::get_gtnc(float cX, float cY)
+{
+  return make_float2((m_texMax.x-m_texMin.y)*cX+m_texMin.x,(m_texMax.y-m_texMin.y)*cY+m_texMin.y);
 }

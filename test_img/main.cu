@@ -40,6 +40,7 @@ int main(int argc, char** argv)
   uint h = HEIGHT;
   float *tab = new float [w*h];
   readFile("lena.png", tab);
+  srand(time(NULL));
 
   float *devTab;
   cudaMalloc(&devTab,w*h*sizeof(float));
@@ -52,11 +53,15 @@ int main(int argc, char** argv)
   Image tile = img.makeTile(10,10,1024,1024);
   Image ttile = tile.makeTile(10,10,512,512);
 
-  cout << "Image: " << img.getVal(500,500) << endl;
-  cout << "Tuile: " << tile.getVal(490,490) << endl;
-  cout << "Tuile de tuile: " << ttile.getVal(480,480) << endl;
+  uint x = (int)(rand()%500+20);
+  uint y = (int)(rand()%500+20);
 
-  tile.writeToFile("tile.png");
-  ttile.writeToFile("ttile.png");
+  cout << "Point: " << x << ", " << y << endl;
+  cout << "Image: " << img.getVal(x,y) << endl;
+  cout << "Tuile: " << tile.getVal(x-10,y-10) << endl;
+  cout << "sous-tuile: " << ttile.getVal(x-20,y-20) << endl;
+
+  //tile.writeToFile("tile.png");
+  
   return EXIT_SUCCESS;
 }
