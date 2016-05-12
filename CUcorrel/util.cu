@@ -2,7 +2,6 @@
 //#include <fstream> //f.open
 //#include <stdlib.h> //atof
 #include <cusolverDn.h> // Pour invert
-#include "kernels.cuh"//reduce
 #include "CUcorrel.h"//BLOCKSIZE
 #include "lodepng/lodepng.h"
 
