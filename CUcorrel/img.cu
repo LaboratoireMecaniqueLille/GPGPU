@@ -7,6 +7,11 @@ using namespace std;
 float* devTemp;
 float2* devTemp2;
 
+inline __host__ __device__ float2 operator-(float2 a, float2 b)
+{
+      return make_float2(a.x - b.x, a.y - b.y);
+}
+
 void allocTemp()
 {
   cudaMalloc(&devTemp,IMG_SIZE*sizeof(float));
@@ -209,6 +214,8 @@ void Image::getDiff(float* devImg, float* devDiff)
   dim3 grid((m_w+31)/32,(m_h+31));
   dim3 block(min(m_w,32),min(m_h,32));
 
+  devGetDiff<<<grid,block>>>(devDiff, devImg, m_tex, m_texMax-m_texMin,m_texMin,m_w, m_h);
+
 }
 
 __global__ void makeZeroDisplacement(float2* disp, uint w, uint h)
@@ -275,4 +282,12 @@ void makeTranslationField(float2* devDisp, float mvX, float mvY, uint w, uint h)
   dim3 grid((w+31)/32,(h+31)/32);
   dim3 block(min(w,32),min(h,32));
   devTrField<<<grid,block>>>(devDisp,mvX,mvY,w,h);
+}
+
+__global__ void devGetDiff(float* diff, float* img, cudaTextureObject_t tex, float2 m, float2 p, uint w, uint h)
+{
+  uint idx = blockIdx.x*blockDim.x+threadIdx.x;
+  uint idy = blockIdx.y*blockDim.y+threadIdx.y;
+  
+  diff[idx+w*idy] = tex2D<float>(tex,m.x*((float)idx/w)+p.x,m.y*((float)idy/h)+p.y)-img[idx+w*idy];
 }

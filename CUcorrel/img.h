@@ -12,6 +12,7 @@ __global__ void addDisplacement(float2* disp, float param, float2* field, uint w
 __global__ void ewMul(float2* tab, float2 k);
 __global__ void gradient(cudaTextureObject_t, float*, float*, uint, uint);
 __global__ void devTrField(float2* disp, float mvX, float mvY, uint w, uint h);
+__global__ void devGetDiff(float* diff, float* img, cudaTextureObject_t tex, float2 m, float2 p, uint w, uint h);
 
 
 void allocTemp();

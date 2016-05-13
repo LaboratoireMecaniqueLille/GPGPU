@@ -83,7 +83,7 @@ int main(int argc, char** argv)
   readFile(iAddr,orig,256);
   cudaMemcpy(devOrig[0],orig,taille,cudaMemcpyHostToDevice);
   Image imgOrig[LVL];
-  imgOrig[0].init(WIDTH,HEIGHT, devOrig[0]);
+  imgOrig[0].init(WIDTH,HEIGHT,devOrig[0]);
 
   // ---------- Lecture de l'image déformée  -----------
   readFile(iAddr_d,orig, 256);
@@ -160,7 +160,16 @@ int main(int argc, char** argv)
       {
         makeTranslationField(devField,mvX,mvY,T_WIDTH/div,T_HEIGHT/div);
         t_imgOrig[l][t].interpLinear(devOut,devField,T_SIZE/div/div);
-        t_imgOrig[l][t].getDiff(devOut,devDiff);
+        t_imgDef[l][t].getDiff(devOut,devDiff);
+        if(l == 0)
+        {
+          t_imgDef[l][t].writeToFile("out/def.png");
+          Image out(T_WIDTH/div,T_HEIGHT/div,devOut);
+          out.writeToFile("out/out.png");
+          Image diff(T_WIDTH/div,T_HEIGHT/div,devDiff);
+          diff.writeToFile("out/diff.png",.5f,128.f);
+          exit(0);
+        }
         /*dir = t_imgOrig[l][t].gradientDescent(devOut,t_imgGradX[l][t],t_imgGradY[l][t]);
         cout << dir.x << ", " << dir.y << endl;*/
       }
