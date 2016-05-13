@@ -4,8 +4,20 @@
 
 typedef unsigned int uint;
 
+
 __global__ void interpolate(float* out, cudaTextureObject_t tex, float2* points, uint N);
 __global__ void normalize(float2* points, float2 texMin, float2 texMax, uint w, uint h, uint N);
+__global__ void makeZeroDisplacement(float2* disp, uint w, uint h);
+__global__ void addDisplacement(float2* disp, float param, float2* field, uint w, uint h);
+__global__ void ewMul(float2* tab, float2 k);
+__global__ void gradient(cudaTextureObject_t, float*, float*, uint, uint);
+__global__ void devTrField(float2* disp, float mvX, float mvY, uint w, uint h);
+
+
+void allocTemp();
+void freeTemp();
+void makeDisplacement(float2* devDisp, float param, float2* devField, uint w, uint h);
+void makeTranslationField(float2* devDisp, float mvX, float mvY, uint w, uint h);
 
 class Image
 {
@@ -24,7 +36,7 @@ class Image
   float2 get_gtnc(float2 coord); // (get Global Texture Normalized Coordinates)
   float2 get_gtnc(float cX, float cY);
   void genTexture();
-  void mip(float* devOut, uint w, uint h, float2* devTemp);
+  void mip(float* devOut, uint w, uint h);
   void computeGradients(float* devGradX, float* devGradY);
   void getDiff(float* devImg, float* devDiff);
 
@@ -41,10 +53,3 @@ class Image
   uint m_offset;
 };
 
-__global__ void makeZeroDisplacement(float2* disp, uint w, uint h);
-__global__ void addDisplacement(float2* disp, float param, float2* field, uint w, uint h);
-__global__ void ewMul(float2* tab, float2 k);
-__global__ void gradient(cudaTextureObject_t, float*, float*, uint, uint);
-__global__ void devTrField(float2* disp, float mvX, float mvY, uint w, uint h);
-void makeDisplacement(float2* devDisp, float param, float2* devField, uint w, uint h);
-void makeTranslationField(float2* devDisp, float mvX, float mvY, uint w, uint h);

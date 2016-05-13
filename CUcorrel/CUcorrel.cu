@@ -4,7 +4,6 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 
-//#include "kernels.cuh"
 #include "CUcorrel.h"
 #include "util.h"
 #include "img.h"
@@ -21,7 +20,7 @@ int main(int argc, char** argv)
   int nbIter=10; // Le nombre d'itérations
   char iAddr[10] = "img.png"; // Le nom du fichier à ouvrir
   char iAddr_d[10] = "img_d.png"; // Le nom du fichier déformé à ouvrir
-  float *orig = (float*)malloc(taille); // le tableau contenant l'image sur l'hôte
+  float orig[IMG_SIZE]; // le tableau contenant l'image sur l'hôte
   //char oAddr[25]; // pour écrire les noms des fichiers de sortie
   float param[PARAMETERS] = {0}; // Stocke les paramètres calculés
   //float res; // Le résidu 
@@ -34,7 +33,6 @@ int main(int argc, char** argv)
   float *devGradX[LVL]; // Gradient de l'image d'origine par rapport à X
   float *devGradY[LVL]; // .. à Y
   float2 *devFields[LVL]; // Contient les PARAMETERS champs de déplacements élémentaires à la suite dont on cherche l'influence par autant de paramètres
-  float2 *devTemp; // Tableau de cache pour le rééchantillonage
   float *devParam; // Contient la valeur actuelle calculée des paramètres
   float *devDef[LVL]; // Image déformée à recaler
   float *devOut; // L'image interpolée à chaque itération
@@ -48,6 +46,7 @@ int main(int argc, char** argv)
   srand(time(NULL)); // Seed pour générer le bruit avec rand()
 
   // ---------- Allocation de tous les tableaux du device ---------
+  allocTemp();
   div = 1;
   for(int i = 0; i < LVL; i++)
   {
@@ -60,7 +59,6 @@ int main(int argc, char** argv)
   }
   cudaMalloc(&devParam,PARAMETERS*sizeof(float));
   cudaMemcpy(devParam,param,PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
-  cudaMalloc(&devTemp, taille2);
   cudaMalloc(&devOut,taille);
   cudaMalloc(&devMatrix,PARAMETERS*PARAMETERS*sizeof(float));
   cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(float));
@@ -101,9 +99,9 @@ int main(int argc, char** argv)
   {
     if(l != 0) // Calculer l'image en fonction de l'étage précédent (sauf pour le premier)
     {
-      imgOrig[l-1].mip(devOrig[l],WIDTH/div,HEIGHT/div, devTemp);
+      imgOrig[l-1].mip(devOrig[l],WIDTH/div,HEIGHT/div);
       imgOrig[l].init(WIDTH/div,HEIGHT/div,devOrig[l]);
-      imgDef[l-1].mip(devDef[l],WIDTH/div,HEIGHT/div, devTemp);
+      imgDef[l-1].mip(devDef[l],WIDTH/div,HEIGHT/div);
       imgDef[l].init(WIDTH/div,HEIGHT/div,devDef[l]);
     }
     for(uint x = 0; x < NTILES; x++) // Itérer sur les tuiles pour créer les objets correspondants
@@ -325,6 +323,7 @@ for(tile.x = 1; tile.x < NTILES-1; tile.x++) // Double boucle sur les tuiles (Ne
   {cout << cudaGetErrorName(err) << endl;}
 */
   // ---------- Libération des arrays dans la mémoire du device ----------
+  freeTemp();
   cudaFree(devOrig);
   cudaFree(devGradX);
   cudaFree(devGradY);
@@ -341,7 +340,5 @@ for(tile.x = 1; tile.x < NTILES-1; tile.x++) // Double boucle sur les tuiles (Ne
   cudaFree(devVecStep);
   cudaFree(devVecOld);
 
-  // ---------- Libération des arrays de l'hôte ----------
-  free(orig);
   return 0;
 }

@@ -1,8 +1,23 @@
 #include "img.h"
+#include "CUcorrel.h"
 #include "lodepng/lodepng.h"
 
 using namespace std;
 
+float* devTemp;
+float2* devTemp2;
+
+void allocTemp()
+{
+  cudaMalloc(&devTemp,IMG_SIZE*sizeof(float));
+  cudaMalloc(&devTemp2,IMG_SIZE*sizeof(float2));
+}
+
+void freeTemp()
+{
+  cudaFree(devTemp);
+  cudaFree(devTemp2);
+}
 __global__ void interpolate(float* out, cudaTextureObject_t tex, float2* points, uint N)
 {
   uint id = threadIdx.x+blockIdx.x*blockDim.x;
@@ -163,16 +178,16 @@ void Image::genTexture()
   cudaCreateTextureObject(&m_tex, &resDesc, &texDesc, NULL);
 }
 
-void Image::mip(float* devOut, uint w, uint h, float2* devTemp)
+void Image::mip(float* devOut, uint w, uint h)
 {
   if(w <= m_w && h <= m_h)
   {
     dim3 gridsize((w+31)/32,(h+31)/32);
     dim3 blocksize(min(32,w),min(32,h));
 
-    makeZeroDisplacement<<<gridsize,blocksize>>>(devTemp, w, h);
-    ewMul<<<(w*h+1023)/1024,min(1024,w*h)>>>(devTemp,make_float2((float)m_w/w,(float)m_h/h));
-    interpLinear(devOut,devTemp,w*h);
+    makeZeroDisplacement<<<gridsize,blocksize>>>(devTemp2, w, h);
+    ewMul<<<(w*h+1023)/1024,min(1024,w*h)>>>(devTemp2,make_float2((float)m_w/w,(float)m_h/h));
+    interpLinear(devOut,devTemp2,w*h);
   }
   
 }
@@ -193,7 +208,6 @@ void Image::getDiff(float* devImg, float* devDiff)
 {
   dim3 grid((m_w+31)/32,(m_h+31));
   dim3 block(min(m_w,32),min(m_h,32));
-
 
 }
 
