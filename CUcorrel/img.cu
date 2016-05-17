@@ -316,7 +316,7 @@ float2 gradientDescent(float* devDiff, Image gradX, Image gradY)
   float x,y;
   cudaMemcpy(&x,devTemp,sizeof(float),cudaMemcpyDeviceToHost);
   cudaMemcpy(&y,devTempB,sizeof(float),cudaMemcpyDeviceToHost);
-  float norm = w*h*500.f;
+  float norm = w*h*32768.f; // On divise par 256² et on fait x2 pour accélérer la convergence
   return(make_float2(x/norm,y/norm));
 }
 
