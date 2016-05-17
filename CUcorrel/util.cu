@@ -1,9 +1,11 @@
 #include <iostream> //cout
+#include <sstream> // pour str()
 //#include <fstream> //f.open
 //#include <stdlib.h> //atof
 #include <cusolverDn.h> // Pour invert
 #include "CUcorrel.h"//BLOCKSIZE
 #include "lodepng/lodepng.h"
+#include "reduction.cuh" // sum()
 
 #include "util.h"
 
@@ -202,26 +204,48 @@ void checkError(cusolverStatus_t cuSolverStatus)
   }
 }
 
-void invert(float* devA, float* devInv)
+void invert(float* devA, float* devInv, uint N) //N: côté de la matrice carrée
 {
   cusolverDnHandle_t handle = NULL;
   cusolverDnCreate(&handle);
-  //cudaMalloc(&devInv,PARAMETERS*PARAMETERS*sizeof(double));// On suppose qu'il est déjà alloué...
-  float B[PARAMETERS*PARAMETERS] = {0};
-  for(int i = 0; i < PARAMETERS; i++)
-  {B[(PARAMETERS+1)*i] = 1;}
-  cudaMemcpy(devInv,B,PARAMETERS*PARAMETERS*sizeof(float),cudaMemcpyHostToDevice);
+  float *B = new float [N*N];
+  for(int i = 0; i < N; i++)
+  {B[(N+1)*i] = 1;}
+  cudaMemcpy(devInv,B,N*N*sizeof(float),cudaMemcpyHostToDevice);
   int bufferSize=0;
-  cusolverDnSgetrf_bufferSize(handle,PARAMETERS,PARAMETERS,devA,PARAMETERS,&bufferSize);
+  cusolverDnSgetrf_bufferSize(handle,N,N,devA,N,&bufferSize);
   float* buffer;
   cudaMalloc(&buffer,bufferSize*sizeof(float));
   int* piv;
-  cudaMalloc(&piv,PARAMETERS*sizeof(float));
+  cudaMalloc(&piv,N*sizeof(float));
   int *info;
   cudaMalloc(&info,sizeof(int));
-  checkError(cusolverDnSgetrf(handle,PARAMETERS,PARAMETERS,devA,PARAMETERS,buffer,piv,info));
-  checkError(cusolverDnSgetrs(handle,CUBLAS_OP_N,PARAMETERS,PARAMETERS,devA,PARAMETERS,piv,devInv,PARAMETERS,info));
+  delete B;
+  checkError(cusolverDnSgetrf(handle,N,N,devA,N,buffer,piv,info));
+  checkError(cusolverDnSgetrs(handle,CUBLAS_OP_N,N,N,devA,N,piv,devInv,N,info));
   cudaFree(buffer);
   cudaFree(piv);
   cudaFree(info);
+}
+
+string str(float2 u)
+{
+  ostringstream s;
+  s << u.x << ", " << u.y;
+  return s.str();
+}
+
+__global__ void square(float* tab)
+{
+  uint id = threadIdx.x+blockIdx.x*blockDim.x;
+  tab[id]*=tab[id];
+}
+
+float squareSum(float* devTab, uint len)
+{
+  square<<<(len+1023)/1024,min(1024,len)>>>(devTab);
+  sum(devTab,len);
+  float r;
+  cudaMemcpy(&r,devTab,sizeof(float),cudaMemcpyDeviceToHost);
+  return r;
 }
