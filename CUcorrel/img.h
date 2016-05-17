@@ -57,3 +57,8 @@ class Image
 };
 
 float2 gradientDescent(float* devDiff, Image gradX, Image gradY);
+
+inline __host__ __device__ void operator*=(float2 &a, float s)
+{
+      a.x *= s; a.y *= s;
+}
