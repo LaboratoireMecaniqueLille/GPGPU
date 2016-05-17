@@ -1,6 +1,5 @@
 #ifndef CUCORREL //Pour éviter l'inclusion recursive
 #define CUCORREL
-#define PARAMETERS 2 // Le nombre de paramètres (et donc de champs)
 #define WIDTH 2048
 #define HEIGHT 2048
 #define NTILES 16
