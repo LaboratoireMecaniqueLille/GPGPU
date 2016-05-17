@@ -137,31 +137,20 @@ int main(int argc, char** argv)
   float res;
   for(int l = LVL-1; l>=0; l--) // On boucle sur les étages
   {
-    //cout << "\n\n##### Niveau " << l << " #####" << endl;
+    DEBUG("\n\n##### Niveau " << l << " #####");
     div /= 2;
     for(uint t = 0; t < NTILES*NTILES; t++)
     {
-      //cout << "\nTuile " << t/NTILES << ", " << t%NTILES << endl;
+      DEBUG("\nTuile " << t/NTILES << ", " << t%NTILES);
       for(uint i=0; i < nbIter; i++)
       {
         makeTranslationField(devField,vect[t],T_WIDTH/div,T_HEIGHT/div);
         t_imgOrig[l][t].interpLinear(devOut,devField,T_SIZE/div/div);
         t_imgDef[l][t].getDiff(devOut,devDiff);
         dir = gradientDescent(devDiff,t_imgGradX[l][t],t_imgGradY[l][t]);
-        res = squareSum(devDiff,T_WIDTH*T_HEIGHT/div/div);
-        vect[t] += dir;
-
-
-
-        if(t == 150)
-        {
-          cout << "Itération " << i << endl;
-          cout << "Direction: " << str(dir) << endl;
-          cout << "Vect: " << str(vect[t]) << endl;
-          cout << "Résidu: " << res << endl;
           if(i==9)
           {
-            sprintf(oAddr,"out/L%db.png",l);
+            sprintf(oAddr,"out/L%dt%db.png",LVL-l,t);
             Image diff(T_WIDTH/div,T_HEIGHT/div,devDiff);
             diff.writeToFile(oAddr,1.f,128.f);
           }
@@ -169,17 +158,34 @@ int main(int argc, char** argv)
           {
             t_imgOrig[l][t].writeToFile("out/orig.png");
             t_imgDef[l][t].writeToFile("out/def.png");
-            sprintf(oAddr,"out/L%da.png",l);
+            sprintf(oAddr,"out/L%dt%da.png",LVL-l,t);
             Image diff(T_WIDTH/div,T_HEIGHT/div,devDiff);
             diff.writeToFile(oAddr,1.f,128.f);
           }
-        }
+        res = squareSum(devDiff,T_WIDTH*T_HEIGHT/div/div);
+        vect[t] += dir;
 
+
+          DEBUG("\nItération " << i);
+          DEBUG("Direction: " << str(dir));
+          DEBUG("Vect: " << str(vect[t]));
+          DEBUG("Résidu: " << res);
 
       }
     }
   }
   cudaFree(devField);
+
+
+  for(uint i = 0; i < NTILES; i++)
+  {
+    for(uint j = 0; j < NTILES; j++)
+    {
+      cout << str(vect[i*NTILES+j]) << " ;  ";
+    }
+    cout << endl;
+  }
+
 
   // ---------- Libération des arrays dans la mémoire du device ----------
   freeTemp();
