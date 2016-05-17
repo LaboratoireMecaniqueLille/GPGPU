@@ -29,8 +29,6 @@ __global__ void reduce(float *array,uint size)
   }
   if(tid == 0)
   {array[blockIdx.x] = sh_data[0];}
-
-
 }
 
 void sum(float *array, uint size)
