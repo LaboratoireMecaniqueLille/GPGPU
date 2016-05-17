@@ -1,10 +1,12 @@
 #include "img.h"
 #include "CUcorrel.h"
+#include "reduction.cuh"
 #include "lodepng/lodepng.h"
 
 using namespace std;
 
 float* devTemp;
+float* devTempB;
 float2* devTemp2;
 
 inline __host__ __device__ float2 operator-(float2 a, float2 b)
@@ -15,12 +17,14 @@ inline __host__ __device__ float2 operator-(float2 a, float2 b)
 void allocTemp()
 {
   cudaMalloc(&devTemp,IMG_SIZE*sizeof(float));
+  cudaMalloc(&devTempB,IMG_SIZE*sizeof(float));
   cudaMalloc(&devTemp2,IMG_SIZE*sizeof(float2));
 }
 
 void freeTemp()
 {
   cudaFree(devTemp);
+  cudaFree(devTempB);
   cudaFree(devTemp2);
 }
 __global__ void interpolate(float* out, cudaTextureObject_t tex, float2* points, uint N)
@@ -191,7 +195,7 @@ void Image::mip(float* devOut, uint w, uint h)
     dim3 blocksize(min(32,w),min(32,h));
 
     makeZeroDisplacement<<<gridsize,blocksize>>>(devTemp2, w, h);
-    ewMul<<<(w*h+1023)/1024,min(1024,w*h)>>>(devTemp2,make_float2((float)m_w/w,(float)m_h/h));
+    kMul2<<<(w*h+1023)/1024,min(1024,w*h)>>>(devTemp2,make_float2((float)m_w/w,(float)m_h/h));
     interpLinear(devOut,devTemp2,w*h);
   }
   
@@ -239,7 +243,14 @@ __global__ void addDisplacement(float2* disp, float param, float2* field, uint w
 
 }
 
-__global__ void ewMul(float2* tab, float2 k)
+__global__ void ewMul(float* tab1, float* tab2)
+{
+  uint id = threadIdx.x+blockIdx.x*blockDim.x;
+
+  tab1[id] *= tab2[id];
+}
+
+__global__ void kMul2(float2* tab, float2 k)
 {
   uint id = threadIdx.x+blockIdx.x*blockDim.x;
   tab[id] = make_float2(k.x*tab[id].x,k.y*tab[id].y);
@@ -268,20 +279,20 @@ void makeDisplacement(float2* devDisp, float param, float2* devField, uint w, ui
   addDisplacement<<<grid,block>>>(devDisp, param, devField, w, h); // à boucler...
 }
 
-__global__ void devTrField(float2* disp, float mvX, float mvY, uint w, uint h)
+__global__ void devTrField(float2* disp, float2 mv, uint w, uint h)
 {
   uint idx = threadIdx.x+blockIdx.x*blockDim.x;
   uint idy = threadIdx.y+blockIdx.y*blockDim.y;
   if(idx < w && idy < h)
   {
-    disp[idx+idy*w] = make_float2(idx+.5f+mvX,idy+.5f+mvY);
+    disp[idx+idy*w] = make_float2(idx+.5f+mv.x,idy+.5f+mv.y);
   }
 }
-void makeTranslationField(float2* devDisp, float mvX, float mvY, uint w, uint h)
+void makeTranslationField(float2* devDisp, float2 mv, uint w, uint h)
 {
   dim3 grid((w+31)/32,(h+31)/32);
   dim3 block(min(w,32),min(h,32));
-  devTrField<<<grid,block>>>(devDisp,mvX,mvY,w,h);
+  devTrField<<<grid,block>>>(devDisp,mv,w,h);
 }
 
 __global__ void devGetDiff(float* diff, float* img, cudaTextureObject_t tex, float2 m, float2 p, uint w, uint h)
@@ -290,4 +301,33 @@ __global__ void devGetDiff(float* diff, float* img, cudaTextureObject_t tex, flo
   uint idy = blockIdx.y*blockDim.y+threadIdx.y;
   
   diff[idx+w*idy] = tex2D<float>(tex,m.x*((float)idx/w)+p.x,m.y*((float)idy/h)+p.y)-img[idx+w*idy];
+}
+
+
+float2 gradientDescent(float* devDiff, Image gradX, Image gradY)
+{
+  uint w = gradX.getW();
+  uint h = gradX.getH();
+  dim3 grid((w+31)/32,(h+31)/32);
+  dim3 block(min(32,w),min(32,h));
+  devGradientDescent<<<grid,block>>>(devTemp,devTempB,devDiff,gradX.m_tex,gradY.m_tex,gradX.m_texMax-gradX.m_texMin,gradX.m_texMin,gradX.m_w,gradX.m_h);
+  sum(devTemp,w*h);
+  sum(devTempB,w*h);
+  float x,y;
+  cudaMemcpy(&x,devTemp,sizeof(float),cudaMemcpyDeviceToHost);
+  cudaMemcpy(&y,devTempB,sizeof(float),cudaMemcpyDeviceToHost);
+  float norm = w*h*500.f;
+  return(make_float2(x/norm,y/norm));
+}
+
+__global__ void devGradientDescent(float* outX, float* outY, float* tab, cudaTextureObject_t texGX, cudaTextureObject_t texGY, float2 m, float2 p, uint w, uint h)
+{
+  uint idx = blockIdx.x*blockDim.x+threadIdx.x;
+  uint idy = blockIdx.y*blockDim.y+threadIdx.y;
+  float x = m.x*((float)idx/w)+p.x;
+  float y = m.y*((float)idy/h)+p.y;
+  float diff = tab[idx+w*idy];
+
+  outX[idx+w*idy] = tex2D<float>(texGX,x,y)*diff;
+  outY[idx+w*idy] = tex2D<float>(texGY,x,y)*diff;
 }
