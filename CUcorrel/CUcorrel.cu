@@ -17,7 +17,7 @@ int main(int argc, char** argv)
   //cudaError_t err; // Pour récupérer les erreurs éventuelles
   size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
   size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
-  int nbIter=10; // Le nombre d'itérations
+  int nbIter=3; // Le nombre d'itérations
   char iAddr[10] = "img.png"; // Le nom du fichier à ouvrir
   char iAddr_d[10] = "img_d.png"; // Le nom du fichier déformé à ouvrir
   float orig[IMG_SIZE]; // le tableau contenant l'image sur l'hôte
@@ -133,8 +133,10 @@ int main(int argc, char** argv)
   float* devDiff;
   cudaMalloc(&devDiff,taille);
   float2 dir;
+  float2 oldvec;
   float2 vect[NTILES*NTILES] = {make_float2(0,0)};
   float res;
+  float oldRes;
   for(int l = LVL-1; l>=0; l--) // On boucle sur les étages
   {
     DEBUG("\n\n##### Niveau " << l << " #####");
@@ -142,12 +144,16 @@ int main(int argc, char** argv)
     for(uint t = 0; t < NTILES*NTILES; t++)
     {
       DEBUG("\nTuile " << t/NTILES << ", " << t%NTILES);
+      res = 1e30;
       for(uint i=0; i < nbIter; i++)
       {
         makeTranslationField(devField,vect[t],T_WIDTH/div,T_HEIGHT/div);
         t_imgOrig[l][t].interpLinear(devOut,devField,T_SIZE/div/div);
         t_imgDef[l][t].getDiff(devOut,devDiff);
         dir = gradientDescent(devDiff,t_imgGradX[l][t],t_imgGradY[l][t]);
+
+        // ----------- [Facultatif] enregistrement de la différence de la tuile -------------
+        /*
           if(i==9)
           {
             sprintf(oAddr,"out/L%dt%db.png",LVL-l,t);
@@ -162,14 +168,44 @@ int main(int argc, char** argv)
             Image diff(T_WIDTH/div,T_HEIGHT/div,devDiff);
             diff.writeToFile(oAddr,1.f,128.f);
           }
-        res = squareSum(devDiff,T_WIDTH*T_HEIGHT/div/div);
-        vect[t] += dir;
+        */
+
+        DEBUG("\nItération " << i);
+        DEBUG("Direction: " << str(dir));
+        DEBUG("Vect: " << str(vect[t]));
+        DEBUG("Résidu précédent: " << res);
+
+        uint c = 0;
+
+        while(c < 10)
+        {
+          c+=1;
+          dir *= 1.5;
+          if(c > 6)
+            dir *= 3;
+          //DEBUG("dir=" << str(dir));
+          oldRes = res;
+          makeTranslationField(devField,vect[t],T_WIDTH/div,T_HEIGHT/div);
+          t_imgOrig[l][t].interpLinear(devOut,devField,T_SIZE/div/div);
+          t_imgDef[l][t].getDiff(devOut,devDiff);
+          res = squareSum(devDiff,T_WIDTH*T_HEIGHT/div/div);
+          oldvec = vect[t];
+          DEBUG("Nouveau résidu: " << res);
+          if(res > oldRes)
+          {
+            DEBUG("On annule...");
+            vect[t] = oldvec;
+            break;
+          }
+          vect[t] += dir;
+        }
+        if(c == 2)
+        {
+          DEBUG("On n'avance plus !");
+          break;
+        }
 
 
-          DEBUG("\nItération " << i);
-          DEBUG("Direction: " << str(dir));
-          DEBUG("Vect: " << str(vect[t]));
-          DEBUG("Résidu: " << res);
 
       }
     }
