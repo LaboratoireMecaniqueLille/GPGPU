@@ -2,10 +2,8 @@ Programme pour la corrélation sur GPU
 
 Utilise CUDA version 5 ou supérieure (testé uniquement sur CUDA 7.5)
 
-Applique une résolution itérative pour chercher les paramètres minimisant les différences une image fixe et une image déformée selon des champs définis dans fields.cu. Cette version possède 6 paramètres: 3 pour les mouvements de corps solide, 2 pour les déformations uniformes et 1 de cisaillement.
+Applique une résolution itérative pour chercher les paramètres minimisant les différences une image fixe et une image déformée . Cette version du programme travaille sur des sous-images (par défaut 16x16 "tuiles") et cherche à mesurer le déplacement en pixel de chacune des tuiles, ce qui permet de reconstruire une grille de déformation (pour un modèle éléments finis par exemple).
 
-Cette version utilise la méthode de Gauss Newton pour la résolution itérative.
+Pour l'instant, le programme ouvre une image en .png (à l'aide de lodepng de Ivandeve https://github.com/lvandeve/lodepng), et cherche à la recaler sur une seconde image.
 
-Pour l'instant, le programme ouvre une seule image, la déforme et la bruite puis cherche à retrouver les paramètres de déformation. Par rapport à l'image originale en un nombre fixe d'itérations.
-
-Le programme rééchantillone l'image pour appliquer les premières itérations à des images plus petites, ce qui coûte moins cher en calcul. La convergence n'est pas toujours correcte, en particulier avec de grandes déformations sur les images contenant des hautes fréquences. Les recherches pour pallier à ce problème se font au niveau de l'interpolateur (une version à interpolateur bicubique arrive prochainement) et de la méthode du calcul du gradient.
+Le programme rééchantillone l'image pour appliquer les premières itérations à des images plus petites, ce qui coûte moins cher en calcul. La convergence n'est pas toujours correcte, en particulier avec de grands déplacements.
