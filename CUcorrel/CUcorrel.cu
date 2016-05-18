@@ -13,8 +13,7 @@ using namespace std;
 
 int main(int argc, char** argv)
 {
-  //struct timeval t0, t1, t2, t00; // Pour mesurer les durées d'exécution
-  //cudaError_t err; // Pour récupérer les erreurs éventuelles
+  struct timeval t1, t2; // Pour mesurer les durées d'exécution
   size_t taille = IMG_SIZE*sizeof(float); // Taille d'un tableau contenant une image
   size_t taille2 = IMG_SIZE*sizeof(float2); // idem à 2 dimensions (fields)
   int nbIter=3; // Le nombre d'itérations
@@ -40,6 +39,13 @@ int main(int argc, char** argv)
   float *devVecStep; // Multiplie terme à terme la direction avant le l'ajouter aux paramètres
   float *devVecOld; // Pour stocker le vecteur précédent et le restaurer si nécessaire
   float *devTileDef; // Pour stocker la tuile de l'image déformée à chaque fois
+  float2* devField;
+  float* devDiff;
+  float2 dir;
+  float2 oldvec;
+  float2 vect[NTILES*NTILES] = {make_float2(0,0)};
+  float res;
+  float oldRes;
 
   srand(time(NULL)); // Seed pour générer le bruit avec rand()
 
@@ -55,6 +61,8 @@ int main(int argc, char** argv)
     div*=4;
   }
   cudaMalloc(&devParam,sizeof(float2));
+  cudaMalloc(&devDiff,taille);
+  cudaMalloc(&devField,taille2);
   cudaMemcpy(devParam,&param,sizeof(float2),cudaMemcpyHostToDevice);
   cudaMalloc(&devOut,taille);
   cudaMalloc(&devMatrix,4*sizeof(float)); // Matrice 2x2
@@ -128,15 +136,7 @@ int main(int argc, char** argv)
   }
 
   // ---------- Boucle principale ------------
-  float2* devField;
-  cudaMalloc(&devField,taille2);
-  float* devDiff;
-  cudaMalloc(&devDiff,taille);
-  float2 dir;
-  float2 oldvec;
-  float2 vect[NTILES*NTILES] = {make_float2(0,0)};
-  float res;
-  float oldRes;
+  gettimeofday(&t1,NULL);
   for(int l = LVL-1; l>=0; l--) // On boucle sur les étages
   {
     DEBUG("\n\n##### Niveau " << l << " #####");
@@ -145,6 +145,7 @@ int main(int argc, char** argv)
     {
       DEBUG("\nTuile " << t/NTILES << ", " << t%NTILES);
       res = 1e30;
+      vect[t] *= 2;
       for(uint i=0; i < nbIter; i++)
       {
         makeTranslationField(devField,vect[t],T_WIDTH/div,T_HEIGHT/div);
@@ -152,31 +153,12 @@ int main(int argc, char** argv)
         t_imgDef[l][t].getDiff(devOut,devDiff);
         dir = gradientDescent(devDiff,t_imgGradX[l][t],t_imgGradY[l][t]);
 
-        // ----------- [Facultatif] enregistrement de la différence de la tuile -------------
-        /*
-          if(i==9)
-          {
-            sprintf(oAddr,"out/L%dt%db.png",LVL-l,t);
-            Image diff(T_WIDTH/div,T_HEIGHT/div,devDiff);
-            diff.writeToFile(oAddr,1.f,128.f);
-          }
-          if(i==0)
-          {
-            t_imgOrig[l][t].writeToFile("out/orig.png");
-            t_imgDef[l][t].writeToFile("out/def.png");
-            sprintf(oAddr,"out/L%dt%da.png",LVL-l,t);
-            Image diff(T_WIDTH/div,T_HEIGHT/div,devDiff);
-            diff.writeToFile(oAddr,1.f,128.f);
-          }
-        */
-
         DEBUG("\nItération " << i);
         DEBUG("Direction: " << str(dir));
         DEBUG("Vect: " << str(vect[t]));
         DEBUG("Résidu précédent: " << res);
 
         uint c = 0;
-
         while(c < 10)
         {
           c+=1;
@@ -204,15 +186,20 @@ int main(int argc, char** argv)
           DEBUG("On n'avance plus !");
           break;
         }
-
-
-
       }
+        // ----------- [Facultatif] enregistrement de la différence de la tuile -------------
+        //*
+          sprintf(oAddr,"out/DiffL%dt%d.png",LVL-l,t);
+          t_imgOrig[l][t].writeDiffToFile(oAddr,devOut,1.f);
+        //*/
     }
   }
-  cudaFree(devField);
+  cudaDeviceSynchronize();
+  gettimeofday(&t2,NULL);
+  cout << "Durée totale de la boucle principale: " << timeDiff(t1,t2) << " ms." << endl;
 
-
+// ------------- [Facultatif] Affichage des vecteurs ------------
+/*
   for(uint i = 0; i < NTILES; i++)
   {
     for(uint j = 0; j < NTILES; j++)
@@ -221,7 +208,9 @@ int main(int argc, char** argv)
     }
     cout << endl;
   }
-
+*/
+  if(cudaGetLastError() != cudaSuccess)
+  {cout << "Erreur !" << endl;exit(-1);}
 
   // ---------- Libération des arrays dans la mémoire du device ----------
   freeTemp();
@@ -234,6 +223,7 @@ int main(int argc, char** argv)
     cudaFree(devGradY[i]);
   }
   cudaFree(devOut);
+  cudaFree(devField);
   cudaFree(devMatrix);
   cudaFree(devInv);
   cudaFree(devVec);
