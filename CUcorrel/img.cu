@@ -9,11 +9,6 @@ float* devTemp;
 float* devTempB;
 float2* devTemp2;
 
-inline __host__ __device__ float2 operator-(float2 a, float2 b)
-{
-      return make_float2(a.x - b.x, a.y - b.y);
-}
-
 void allocTemp()
 {
   cudaMalloc(&devTemp,IMG_SIZE*sizeof(float));
@@ -153,6 +148,45 @@ void Image::writeToFile(const char* address, float gain, float offset)
   }
   delete image;
 }
+
+
+void Image::writeDiffToFile(const char* address, float* devData, float gain)
+{
+  float *tab = new float [m_w*m_h];
+  for(uint i = 0; i < m_h; i++)
+  {
+    cudaMemcpy(tab+i*m_w,getAddr(0,i),m_w*sizeof(float),cudaMemcpyDeviceToHost);
+  }
+  float *tab2 = new float [m_w*m_h];
+  cudaMemcpy(tab2,devData,m_w*m_h*sizeof(float),cudaMemcpyDeviceToHost);
+
+  unsigned char *image = new unsigned char [4*m_w*m_h];
+  unsigned char val = 0;
+  float diff, r, g;
+  for(uint i = 0; i < m_w*m_h; i++)
+  {
+    diff = (tab[i] - tab2[i])/256.f;
+    r = min(255.f/256.f,-min(0.f,diff*gain));
+    g = min(255.f/256.f,-min(0.f,-diff*gain));
+    val = max(0.f,min(255.f,(tab[i])));
+    val *= (1-r)*(1-g);
+    r*=256.f;
+    g*=256.f;
+    image[4*i] = val+r;
+    image[4*i+1] = val+g;
+    image[4*i+2] = val;
+    image[4*i+3] = 255;
+  }
+  if(lodepng_encode32_file(address, image, m_w, m_h))
+  {
+    cout << "Erreur lors de l'écriture !" << endl;
+    exit(-1);
+  }
+  delete image;
+}
+
+
+
 
 float2 Image::get_gtnc(float2 coord)
 {

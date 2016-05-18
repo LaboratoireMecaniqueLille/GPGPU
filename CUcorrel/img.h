@@ -36,6 +36,7 @@ class Image
   void interpCubic(float devOut, float2* devPoints, uint N);
   Image makeTile(uint x, uint y, uint w, uint h);
   void writeToFile(const char* address, float gain = 1.f, float offset = 0.f);
+  void writeDiffToFile(const char* address, float* devData, float gain);
   float2 get_gtnc(float2 coord); // (get Global Texture Normalized Coordinates)
   float2 get_gtnc(float cX, float cY);
   void genTexture();
@@ -61,4 +62,9 @@ float2 gradientDescent(float* devDiff, Image gradX, Image gradY);
 inline __host__ __device__ void operator*=(float2 &a, float s)
 {
       a.x *= s; a.y *= s;
+}
+
+inline __host__ __device__ float2 operator-(float2 a, float2 b)
+{
+      return make_float2(a.x - b.x, a.y - b.y);
 }
