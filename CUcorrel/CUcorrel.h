@@ -9,8 +9,8 @@
 #define T_SIZE (T_WIDTH*T_HEIGHT)
 #define BLOCKSIZE 1024 //La taille du bloc pour les calculs de sommes (pour les moindres carrés)
 #define LVL 4 // Le nombre d'étage de la pyramide
-#define DEBUG(x) cout << x << endl
-//#define DEBUG(x)
+//#define DEBUG(x) cout << x << endl
+#define DEBUG(x)
 
 
 typedef unsigned int uint;
