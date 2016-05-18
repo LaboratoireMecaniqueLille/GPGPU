@@ -20,32 +20,23 @@ int main(int argc, char** argv)
   char iAddr[10] = "img.png"; // Le nom du fichier à ouvrir
   char iAddr_d[10] = "img_d.png"; // Le nom du fichier déformé à ouvrir
   float orig[IMG_SIZE]; // le tableau contenant l'image sur l'hôte
-  char oAddr[25]; // pour écrire les noms des fichiers de sortie
+  //char oAddr[25]; // pour écrire les noms des fichiers de sortie
   float2 param = make_float2(0,0); // Stocke les paramètres calculés
-  //float res; // Le résidu 
-  //float oldres; // Pour stocker le résidu de l'itération précédente et comparer
-  //int c = 0; // Pour compter les boucles et quitter si on ajoute trop
   uint div = 1; // Pour diviser la taille dans les boucles
-
-  float *devOrig[LVL]; // Image originale
-  float *devGradX[LVL]; // Gradient de l'image d'origine par rapport à X
-  float *devGradY[LVL]; // .. à Y
-  float2 *devParam; // Contient la valeur actuelle calculée des paramètres
-  float *devDef[LVL]; // Image déformée à recaler
-  float *devOut; // L'image interpolée à chaque itération
-  float *devMatrix; // La hessienne utilisée pour la méthode de Newton
-  float *devInv;  // L'inverse de la Hessienne
-  float *devVec; // Vecteur pour stocker les 2 valeurs du gradient à chaque itération
-  float *devVecStep; // Multiplie terme à terme la direction avant le l'ajouter aux paramètres
-  float *devVecOld; // Pour stocker le vecteur précédent et le restaurer si nécessaire
-  float *devTileDef; // Pour stocker la tuile de l'image déformée à chaque fois
-  float2* devField;
-  float* devDiff;
   float2 dir;
   float2 oldvec;
   float2 vect[NTILES*NTILES] = {make_float2(0,0)};
   float res;
   float oldRes;
+
+  float *devOrig[LVL]; // Image originale
+  float *devDef[LVL]; // Image déformée à recaler
+  float *devGradX[LVL]; // Gradient de l'image d'origine par rapport à X
+  float *devGradY[LVL]; // .. à Y
+  float2 *devParam; // Contient la valeur actuelle calculée des paramètres
+  float* devDiff; // Pour stocker la différence des deux images
+  float *devOut; // L'image interpolée à chaque itération
+  float2* devField; // Stocke le champ de déplacement
 
   srand(time(NULL)); // Seed pour générer le bruit avec rand()
 
@@ -62,15 +53,9 @@ int main(int argc, char** argv)
   }
   cudaMalloc(&devParam,sizeof(float2));
   cudaMalloc(&devDiff,taille);
-  cudaMalloc(&devField,taille2);
   cudaMemcpy(devParam,&param,sizeof(float2),cudaMemcpyHostToDevice);
   cudaMalloc(&devOut,taille);
-  cudaMalloc(&devMatrix,4*sizeof(float)); // Matrice 2x2
-  cudaMalloc(&devInv,4*sizeof(float));
-  cudaMalloc(&devVec,sizeof(float2));
-  cudaMalloc(&devVecStep,sizeof(float2));
-  cudaMalloc(&devVecOld,sizeof(float2));
-  cudaMalloc(&devTileDef,T_SIZE*sizeof(float));
+  cudaMalloc(&devField,taille2);
   if(cudaGetLastError() == cudaErrorMemoryAllocation)
   {cout << "Erreur d'allocation (manque de mémoire graphique ?)" << endl;exit(-1);}
   else if(cudaGetLastError() != cudaSuccess)
@@ -188,10 +173,10 @@ int main(int argc, char** argv)
         }
       }
         // ----------- [Facultatif] enregistrement de la différence de la tuile -------------
-        //*
+        /*
           sprintf(oAddr,"out/DiffL%dt%d.png",LVL-l,t);
           t_imgOrig[l][t].writeDiffToFile(oAddr,devOut,1.f);
-        //*/
+        */
     }
   }
   cudaDeviceSynchronize();
@@ -224,11 +209,5 @@ int main(int argc, char** argv)
   }
   cudaFree(devOut);
   cudaFree(devField);
-  cudaFree(devMatrix);
-  cudaFree(devInv);
-  cudaFree(devVec);
-  cudaFree(devVecStep);
-  cudaFree(devVecOld);
-
   return 0;
 }
