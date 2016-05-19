@@ -9,7 +9,7 @@ import sys
 
 import pycuda.autoinit
 
-img_addr = 'Images/lena.png'
+img_addr = '../Images/lena.png'
 out_addr = 'out.png'
 offX = 10.58
 offY = 35.4257
@@ -40,12 +40,6 @@ interp=mod.get_function("interp")
 
 h,w = img.shape
 print("w={}, h={}".format(w,h))
-
-desc = cuda.ArrayDescriptor()
-desc.width = w
-desc.height = h
-desc.format = cuda.dtype_to_array_format(np.float32)
-desc.num_channels = 1
 
 devArray = cuda.matrix_to_array(img,"C")
 
