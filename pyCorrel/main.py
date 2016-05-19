@@ -79,6 +79,9 @@ makeDiff.prepare('Pff',texrefs=[tex,tex_d])
 makeDiff.prepared_call(grid,block,devOut.gpudata,0,0)
 
 out = devOut.get()
+print("OK!")
 
+sat = lambda x: max(0,min(x,255))
+to_uint8 = np.vectorize(sat,otypes=[np.uint8]) # Crée une fonction pour passer de floats non bornés à du uint8 sans dépassement
 
-cv2.imwrite("out.png",out.astype(np.uint8))
+cv2.imwrite("out.png",to_uint8(out))
