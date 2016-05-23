@@ -114,6 +114,7 @@ class gridCorrel:
 
   def __getTileDisplacement(self,tx,ty):
     assert tx < self.numTilesX and ty < self.numTilesY,"__getTileDisplacement call out of bounds"
+    debug(2,"Tile",tx,",",ty)
     res = 1e38
     x=y=0
     for i in self.iteration:
@@ -125,13 +126,16 @@ class gridCorrel:
       tx*self.normalizedTileWidth,ty*self.normalizedTileHeight,\
       x/self.w,y/self.h)
 
-      cv2.imwrite("t{}.png".format(i),self.devTileOut.get()+128)
+      #cv2.imwrite("t{}.png".format(i),self.devTileOut.get()+128)
       # -- Computes the residual --
       oldres = res
       res = self.__squareResidual(self.devTileOut).get()/self.t_w/self.t_h
       debug(3,"Residual:",res,"\n")
       if res > oldres:
         debug(3,"Residual rising ! Exiting the loop...")
+        x+=vx
+        y+=vy
+        debug(2,"Residual:",oldres)
         return x,y
       # -- Computes the direction of research --
       self.__gdProduct.prepared_call(self.t_grid,self.t_block,\
@@ -146,27 +150,26 @@ class gridCorrel:
       x-=vx
       y-=vy
 
-
-
-
-    return 1,1
+    debug(2,"Residual:",res)
+    return x,y
     
 
   def getDisplacementField(self,img_d):
     assert img_d.shape == self.shape,"Displaced image has a different size"
-    dispField = np.zeros((self.w,self.h,2),np.float32)
+    dispField = np.zeros((self.numTilesX,self.numTilesY,2),np.float32)
     self.img_dArray = cuda.matrix_to_array(img_d,"C")
     self.tex_d.set_array(self.img_dArray)
 
 
-    """
-    for i in range(self.ntx):
-      for j in range(self.nty):
-    """
-    i,j = 8,8
-    if True:
-      if True:
-        dispField[i,j] = self.__getTileDisplacement(i,j)
+    #"""
+    for i in range(self.numTilesX):
+      for j in range(self.numTilesY):
+        """
+        i,j = 8,8
+        if True:
+          if True:
+        """
+        dispField[i,j,:] = self.__getTileDisplacement(i,j)
 
 
     return dispField

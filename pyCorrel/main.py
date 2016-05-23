@@ -18,9 +18,10 @@ def openImage(address):
 img = openImage("../Images/lena.png")
 img_d = openImage("../Images/lena_d.png")
 
-correl = gridCorrel(img,16,16,3)
+correl = gridCorrel(img,16,16,2)
 t1 = time()
 df = correl.getDisplacementField(img_d)
 t2 = time()
 print("Elapsed",1000*(t2-t1),"ms.")
-print(df[4:6,2:4,:])
+#print(df[4:6,2:4,:])
+print(df[:10,:10,0])
