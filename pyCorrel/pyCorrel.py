@@ -39,14 +39,14 @@ class gridCorrel:
     self.normalizedTileHeight = self.t_h/self.h
     self.grid = ((self.w+31)//32,(self.h+31)//32)
     self.block = (min(self.w,32),min(self.h,32),1)
-    self.t_grid = (self.it_w//32,(self.it_h//32))
+    self.t_grid = ((self.it_w+31)//32,((self.it_h+31)//32))
     self.t_block = (min(self.it_w,32),min(self.it_h,32),1)
 
     debug(3,"Dimensions:",self.w,self.h)
     debug(2,"Grid:",self.grid)
     debug(2,"Block:",self.block)
     debug(2,"Tile grid:",self.t_grid)
-    debug(3,"Tile block",self.t_block)
+    debug(2,"Tile block",self.t_block)
 
     self.devOut = gpuarray.GPUArray(self.shape,np.float32)
     self.devTileOut = gpuarray.GPUArray(self.t_shape,np.float32)
@@ -156,12 +156,11 @@ class gridCorrel:
 
   def getDisplacementField(self,img_d):
     assert img_d.shape == self.shape,"Displaced image has a different size"
+    debug(2,"Working on a",self.w,",",self.h,"image")
     dispField = np.zeros((self.numTilesX,self.numTilesY,2),np.float32)
     self.img_dArray = cuda.matrix_to_array(img_d,"C")
     self.tex_d.set_array(self.img_dArray)
 
-
-    #"""
     for i in range(self.numTilesX):
       for j in range(self.numTilesY):
         """
@@ -174,44 +173,35 @@ class gridCorrel:
 
     return dispField
     
-"""
 
-imgArray = cuda.matrix_to_array(img,"C")
-img_dArray = cuda.matrix_to_array(img_d,"C")
+class Resize:
+  def __init__(self):
+    mod = SourceModule("""
+  texture<float, cudaTextureType2D, cudaReadModeElementType> tex;
 
-tex.set_array(imgArray)
-tex_d.set_array(img_dArray)
+  __global__ void resize(float* out, int w, int h)
+  {
+    int idx = threadIdx.x+blockIdx.x*blockDim.x;
+    int idy = threadIdx.y+blockIdx.y*blockDim.y;
 
+    out[idx+w*idy] = tex2D(tex,(float)idx/w,(float)idy/h);
+  }
+    """)
+    self.devResize = mod.get_function("resize")
+    self.tex = mod.get_texref('tex')
+    self.tex.set_flags(cuda.TRSF_NORMALIZED_COORDINATES)
+    self.tex.set_filter_mode(cuda.filter_mode.LINEAR)
+    self.tex.set_address_mode(0,cuda.address_mode.CLAMP)
+    self.tex.set_address_mode(1,cuda.address_mode.CLAMP)
 
+  def resize(self,img):
+    devImg = gpuarray.to_gpu(img)
+    w,h = img.shape[0]//2,img.shape[1]//2
+    array = cuda.matrix_to_array(img,"C")
+    self.tex.set_array(array)
 
-makeDiff.prepared_call(grid,block,devOut.gpudata,0,0)
-
-out = devOut.get()
-
-sat = lambda x: max(0,min(x,255))
-to_uint8 = np.vectorize(sat,otypes=[np.uint8]) # Crée une fonction pour passer de floats non bornés à du uint8 sans dépassement
-
-squareResidual = ReductionKernel(np.float32,neutral="0",reduce_expr="a+b",map_expr="x[i]*x[i]",arguments="float *x")
-
-gdKernel = ReductionKernel(np.float32,neutral="0",reduce_expr="a+b",map_expr="x[i]*y[i]",arguments="float* x, float* y")
-
-
-
-
-x,y = 0,0
-for i in range(20):
-  debug(3,"Iteration",i)
-  makeDiff.prepared_call(grid,block,devOut.gpudata,x,y)
-  vx = gdKernel(devOut,devGradX).get()/4194304/128
-  vy = gdKernel(devOut,devGradY).get()/4194304/128
-  x+=vx
-  y+=vy
-  debug(3,"Direction:",vx,vy)
-  debug(3,"Value",x,y)
-  debug(3,"Residual:",squareResidual(devOut).get()/4194304,"\n")
-
-out = devOut.get()+128
-
-cv2.imwrite("out.png",to_uint8(out))
-
-"""
+    devOut = gpuarray.GPUArray((w,h),np.float32)
+    grid = ((w+31)//32,(h+31)//32)
+    block = (min(w,32),min(h,32),1)
+    self.devResize(devOut.gpudata,np.uint32(h),np.uint32(w),grid=grid,block=block)
+    return devOut.get()
