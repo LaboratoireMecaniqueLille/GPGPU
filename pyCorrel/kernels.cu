@@ -28,6 +28,7 @@ NOTE: Offsets are in NORMALIZED coordinates! (between 0 and 1)
 
 __global__ void gradient(float* gradX, float* gradY)
 {
+  //Sobel
   uint x = blockIdx.x*blockDim.x+threadIdx.x;
   uint y = blockIdx.y*blockDim.y+threadIdx.y;
   gradX[x+WIDTH*y] = (tex2D(tex,(x+1.5f)/WIDTH,(float)y/HEIGHT)+tex2D(tex,(x+1.5f)/WIDTH,(y+1.f)/HEIGHT)-tex2D(tex,(x-.5f)/WIDTH,(float)y/HEIGHT)-tex2D(tex,(x-.5f)/WIDTH,(y+1.f)/HEIGHT))*2;
