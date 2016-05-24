@@ -32,6 +32,8 @@ class gridCorrel:
     self.shape = originalImage.shape
     self.w,self.h = self.shape
     self.numTilesX,self.numTilesY = numTilesX,numTilesY
+    self.dispField = np.zeros((self.numTilesX,self.numTilesY,2),np.float32)
+    self.iterCoeffs = [1.1,1.5,3,5,10]
     self.t_w,self.t_h = self.w/numTilesX,self.h/numTilesY
     self.it_w,self.it_h = int(round(self.t_w)),int(round(self.t_h))
     self.t_shape = self.it_w,self.it_h
@@ -111,68 +113,81 @@ class gridCorrel:
     self.gradYArray = cuda.matrix_to_array(self.devGradY.get(),"C")
     self.texGradY.set_array(self.gradYArray)
 
-
-  def __getTileDisplacement(self,tx,ty):
-    assert tx < self.numTilesX and ty < self.numTilesY,"__getTileDisplacement call out of bounds"
-    debug(2,"Tile",tx,",",ty)
-    res = 1e38
-    x=y=0
-    for i in self.iteration:
-      debug(3,"Iteration",i)
-      debug(3,"x=",x,"y=",y)
-      # -- Computes the difference between the original and deformed image
+  def computeDiff(self,tx,ty,x,y):
       self.__makeDiff.prepared_call(self.t_grid,self.t_block,\
       self.devTileOut.gpudata,\
       tx*self.normalizedTileWidth,ty*self.normalizedTileHeight,\
       x/self.w,y/self.h)
 
-      #cv2.imwrite("t{}.png".format(i),self.devTileOut.get()+128)
-      # -- Computes the residual --
-      oldres = res
-      res = self.__squareResidual(self.devTileOut).get()/self.t_w/self.t_h
-      debug(3,"Residual:",res,"\n")
-      if res > oldres:
-        debug(3,"Residual rising ! Exiting the loop...")
-        x+=vx
-        y+=vy
-        debug(2,"Residual:",oldres)
-        return x,y
-      # -- Computes the direction of research --
+  def residual(self):
+      return self.__squareResidual(self.devTileOut).get()/self.t_w/self.t_h
+
+  def gradientDescent(self,tx,ty):
       self.__gdProduct.prepared_call(self.t_grid,self.t_block,\
       self.devTempX.gpudata,self.devTempY.gpudata,\
       self.devTileOut.gpudata,\
       tx*self.normalizedTileWidth,ty*self.normalizedTileHeight)
 
-
-      vx = gpuarray.sum(self.devTempX).get()/(self.t_w*self.t_h)**2*256
-      vy = gpuarray.sum(self.devTempY).get()/(self.t_w*self.t_h)**2*256
-      debug(3,"Direction: ",vx,",",vy)
-      x-=vx
-      y-=vy
-
-    debug(2,"Residual:",res)
-    return x,y
+      vx = gpuarray.sum(self.devTempX).get()/(self.t_w*self.t_h)/32768
+      vy = gpuarray.sum(self.devTempY).get()/(self.t_w*self.t_h)/32768
+      return vx,vy
     
+
+  def __getTileDisplacement(self,tx,ty,ox=0,oy=0):
+    assert tx < self.numTilesX and ty < self.numTilesY,"__getTileDisplacement call out of bounds"
+    debug(2,"Tile",tx,",",ty)
+    x,y=ox,oy
+    self.computeDiff(tx,ty,x,y)
+    res = self.residual()
+    for i in self.iteration:
+      debug(3,"Iteration",i)
+      debug(3,"x=",x,"y=",y)
+      vx,vy = self.gradientDescent(tx,ty)
+      debug(3,"vx=",vx,"vy=",vy)
+      for c in range(5):
+        vx*=self.iterCoeffs[c]
+        vy*=self.iterCoeffs[c]
+        x-=vx
+        y-=vy
+        self.computeDiff(tx,ty,x,y)
+        oldres=res
+        res = self.residual()
+        debug(3,"Add",c,":\nvx=",vx,"vy=",vy,", residual:",res)
+        if res > oldres:
+          debug(3,"Residual increasing, reverting")
+          x+=vx
+          y+=vy
+          res = oldres
+          break
+      if c == 0:
+        debug(3,"Cannot progress any further, returning.")
+        debug(2,"Final residual:",res)
+        return x,y
+    debug(2,"Final residual:",res)
+    return x,y
 
   def getDisplacementField(self,img_d):
     assert img_d.shape == self.shape,"Displaced image has a different size"
     debug(2,"Working on a",self.w,",",self.h,"image")
-    dispField = np.zeros((self.numTilesX,self.numTilesY,2),np.float32)
     self.img_dArray = cuda.matrix_to_array(img_d,"C")
     self.tex_d.set_array(self.img_dArray)
-
+    #Uncomment the following line to work on a single tile
+    #"""
     for i in range(self.numTilesX):
       for j in range(self.numTilesY):
         """
-        i,j = 8,8
-        if True:
-          if True:
-        """
-        dispField[i,j,:] = self.__getTileDisplacement(i,j)
+    i,j = 0,12
+    if True:
+      if True:
+      #"""
+        self.dispField[i,j,:] = self.__getTileDisplacement(i,j,*self.dispField[i,j,:])
 
 
-    return dispField
+    return self.dispField
     
+  def setOriginalDisplacement(self,array):
+    assert array.shape == (self.numTilesX,self.numTilesY,2),"Incorrect initialisation of the displacement field"
+    self.dispField=array
 
 class Resize:
   def __init__(self):
