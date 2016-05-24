@@ -4,6 +4,7 @@ from pyCorrel import gridCorrel,Resize
 import cv2
 import numpy as np
 import sys
+import matplotlib.pyplot as plt
 
 from time import time
 
@@ -15,7 +16,9 @@ def openImage(address):
     sys.exit(-1)
   return img.astype(np.float32)
 
-stages = 4
+ntx = 16
+nty = 16
+stages = 7
 img = [openImage("../Images/ref2.png")]
 
 R = Resize()
@@ -32,15 +35,29 @@ print("Resizing:",1000*(t2-t1),"ms.")
 correl = [0]*stages
 
 for stage in range(stages):
-  correl[stage] = gridCorrel(img[stage],16,16,2)
+  correl[stage] = gridCorrel(img[stage],ntx,nty,1)
 
-df=np.zeros((16,16,2),np.float32)
+df=np.zeros((ntx,nty,2),np.float32)
 for stage in reversed(range(stages)):
   print("\n**** Stage",stage,"****\n\n")
   t1 = time()
   correl[stage].setOriginalDisplacement(df*2)
   df = correl[stage].getDisplacementField(img_d[stage])
-  print(df[:5,:5,0])
   t2 = time()
   print("stage",stage,"duration:",1000*(t2-t1),"ms.")
+resGrid = correl[0].getLastResGrid()
 
+
+st = 0 # Stage to visualize
+norm = 2
+tx,ty=img[st].shape[0]/ntx,img[st].shape[1]/nty
+plt.imshow(img[st],cmap = plt.get_cmap('gray'), vmin = 0, vmax = 255)
+ax = plt.axes()
+scale = img[st].shape[0]/400
+for i in range(1,ntx-1):
+  for j in range(1,nty-1):
+    if resGrid[i,j] < 800:
+      ax.arrow((i+.5)*tx, (j+.5)*ty, df[i,j,0]*scale*norm, df[i,j,1]*scale*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='red', ec='red')
+    else:
+      ax.arrow((i+.5)*tx, (j+.5)*ty, df[i,j,0]*scale*norm, df[i,j,1]*scale*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='blue', ec='blue')
+plt.show()

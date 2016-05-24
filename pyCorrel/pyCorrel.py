@@ -33,7 +33,7 @@ class gridCorrel:
     self.w,self.h = self.shape
     self.numTilesX,self.numTilesY = numTilesX,numTilesY
     self.dispField = np.zeros((self.numTilesX,self.numTilesY,2),np.float32)
-    self.iterCoeffs = [1.1,1.5,3,5,10]
+    self.iterCoeffs = [1.2,2,5,5,5,5,5,10]
     self.t_w,self.t_h = self.w/numTilesX,self.h/numTilesY
     self.it_w,self.it_h = int(round(self.t_w)),int(round(self.t_h))
     self.t_shape = self.it_w,self.it_h
@@ -43,6 +43,7 @@ class gridCorrel:
     self.block = (min(self.w,32),min(self.h,32),1)
     self.t_grid = ((self.it_w+31)//32,((self.it_h+31)//32))
     self.t_block = (min(self.it_w,32),min(self.it_h,32),1)
+    self.resGrid = np.zeros((self.numTilesX,self.numTilesY))
 
     debug(3,"Dimensions:",self.w,self.h)
     debug(2,"Grid:",self.grid)
@@ -144,7 +145,7 @@ class gridCorrel:
       debug(3,"x=",x,"y=",y)
       vx,vy = self.gradientDescent(tx,ty)
       debug(3,"vx=",vx,"vy=",vy)
-      for c in range(5):
+      for c in range(3):
         vx*=self.iterCoeffs[c]
         vy*=self.iterCoeffs[c]
         x-=vx
@@ -161,14 +162,16 @@ class gridCorrel:
           break
       if c == 0:
         debug(3,"Cannot progress any further, returning.")
-        debug(2,"Final residual:",res)
+        debug(2,"Final residual:",res,"\nDisplacement:",x,",",y)
+        self.resGrid[tx,ty] = res
         return x,y
-    debug(2,"Final residual:",res)
+    debug(2,"Final residual:",res,"\nDisplacement:",x,",",y)
+    self.resGrid[tx,ty] = res
     return x,y
 
   def getDisplacementField(self,img_d):
     assert img_d.shape == self.shape,"Displaced image has a different size"
-    debug(2,"Working on a",self.w,",",self.h,"image")
+    debug(1,"Working on a",self.w,",",self.h,"image")
     self.img_dArray = cuda.matrix_to_array(img_d,"C")
     self.tex_d.set_array(self.img_dArray)
     #Uncomment the following line to work on a single tile
@@ -182,9 +185,13 @@ class gridCorrel:
       #"""
         self.dispField[i,j,:] = self.__getTileDisplacement(i,j,*self.dispField[i,j,:])
 
-
+    debug(1,"Average residual:",self.resGrid.mean())
+    debug(1,(self.resGrid<600).sum(),"/",self.numTilesX*self.numTilesY,"below 600")
     return self.dispField
     
+  def getLastResGrid(self):
+    return self.resGrid
+
   def setOriginalDisplacement(self,array):
     assert array.shape == (self.numTilesX,self.numTilesY,2),"Incorrect initialisation of the displacement field"
     self.dispField=array
