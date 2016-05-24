@@ -124,7 +124,7 @@ class gridCorrel:
     self.gradYArray = cuda.matrix_to_array(self.devGradY.get(),"C")
     self.texGradY.set_array(self.gradYArray)
 
-  def computeDiff(self,tx,ty,x,y):
+  def __computeDiff(self,tx,ty,x,y):
     """
     Wrapper to write in self.devDiff the difference between the two textures given the tile coordinates and the displacement in pixels
     tx,ty: integers refering to the tile's coordinates
@@ -135,13 +135,13 @@ class gridCorrel:
     tx*self.normalizedTileWidth,ty*self.normalizedTileHeight,\
     x/self.w,y/self.h)
 
-  def residual(self):
+  def __residual(self):
     """
     Wrapper to compute the residual once self.devDiff has been computed
     """
     return self.__squareResidual(self.devDiff).get()/self.t_w/self.t_h
 
-  def gradientDescent(self,tx,ty):
+  def __gradientDescent(self,tx,ty):
     """
     Wrapper to search for the direction of convergence of the tile (tx,ty) once self.devDiff has been computed
     tx,ty: integers refering to the tile's coordinates
@@ -168,14 +168,14 @@ class gridCorrel:
     x,y=ox,oy
 
     # -- Computes the residual before iterating (sometimes the direction is wrong and increases the residual) --
-    self.computeDiff(tx,ty,x,y)
-    res = self.residual()
+    self.__computeDiff(tx,ty,x,y)
+    res = self.__residual()
     # -- Let's start iterating ! --
     for i in self.iteration:
       debug(3,"Iteration",i)
       debug(3,"x=",x,"y=",y)
       ## -- Get the research direction (self.devDiff has already been computed previously) --
-      vx,vy = self.gradientDescent(tx,ty)
+      vx,vy = self.__gradientDescent(tx,ty)
       debug(3,"vx=",vx,"vy=",vy)
       for c in range(3):
         # -- Still approaching the minimum ? Let's go faster (see self.iterCoeffs in __init__, the more iterations it takes, the faster we grow the direction)
@@ -185,10 +185,10 @@ class gridCorrel:
         x-=vx
         y-=vy
         # -- Compute new diff --
-        self.computeDiff(tx,ty,x,y)
+        self.__computeDiff(tx,ty,x,y)
         oldres=res
         # -- Update residual --
-        res = self.residual()
+        res = self.__residual()
         debug(3,"Add",c,":\nvx=",vx,"vy=",vy,", residual:",res)
         if res > oldres:
           # -- Oops, went to far ! Let's revert this iteration and start with a new direction --
