@@ -265,16 +265,16 @@ class gridCorrel:
 
   def showDisplacement(self,**kwargs):
     import matplotlib.pyplot as plt
-    norm = kwargs.get('norm',2)
+    norm = kwargs.get('norm',10)
     scale = kwargs.get('scale',min(self.w,self.h)/400.)
     plt.imshow(self.orig,cmap = plt.get_cmap('gray'), vmin = 0, vmax = 255)
     ax=plt.axes()
     for i in range(1,self.numTilesX-1):
       for j in range(1,self.numTilesY-1):
         if self.res[i,j] < self.maxRes:
-          ax.arrow((i+.5)*self.t_w, (j+.5)*self.t_h, self.dispField[i,j,0]*scale*norm, self.dispField[i,j,1]*scale*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='red', ec='red')
+          ax.arrow((i+.5)*self.t_w, (j+.5)*self.t_h, self.dispField[i,j,0]*norm, self.dispField[i,j,1]*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='red', ec='red')
         else:
-          ax.arrow((i+.5)*self.t_w, (j+.5)*self.t_h, self.dispField[i,j,0]*scale*norm, self.dispField[i,j,1]*scale*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='blue', ec='blue')
+          ax.arrow((i+.5)*self.t_w, (j+.5)*self.t_h, self.dispField[i,j,0]*norm, self.dispField[i,j,1]*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='blue', ec='blue')
     plt.show()
 
 

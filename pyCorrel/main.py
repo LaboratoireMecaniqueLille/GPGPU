@@ -3,8 +3,6 @@ from __future__ import division, print_function
 from pyCorrel import gridCorrel,Resize
 import cv2
 import numpy as np
-import sys
-import matplotlib.pyplot as plt
 
 from time import time
 
@@ -47,20 +45,4 @@ for stage in reversed(range(stages)):
   t2 = time()
   print("stage",stage,"duration:",1000*(t2-t1),"ms.")
 
-correl[0].showDisplacement()
-
-"""
-st = 0 # Stage to visualize
-norm = 2
-tx,ty=img[st].shape[0]/ntx,img[st].shape[1]/nty
-plt.imshow(img[st],cmap = plt.get_cmap('gray'), vmin = 0, vmax = 255)
-ax = plt.axes()
-scale = img[st].shape[0]/400
-for i in range(1,ntx-1):
-  for j in range(1,nty-1):
-    if resGrid[i,j] < maxRes:
-      ax.arrow((i+.5)*tx, (j+.5)*ty, df[i,j,0]*scale*norm, df[i,j,1]*scale*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='red', ec='red')
-    else:
-      ax.arrow((i+.5)*tx, (j+.5)*ty, df[i,j,0]*scale*norm, df[i,j,1]*scale*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='blue', ec='blue')
-plt.show()
-"""
+  correl[stage].showDisplacement()
