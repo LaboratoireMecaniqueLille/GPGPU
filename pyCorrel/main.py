@@ -33,9 +33,10 @@ t2 = time()
 print("Resizing:",1000*(t2-t1),"ms.")
 
 correl = [0]*stages
+maxRes=800
 
 for stage in range(stages):
-  correl[stage] = gridCorrel(img[stage],ntx,nty,1)
+  correl[stage] = gridCorrel(img[stage],ntx,nty,verbose=2,maxRes=maxRes)
 
 df=np.zeros((ntx,nty,2),np.float32)
 for stage in reversed(range(stages)):
@@ -56,7 +57,7 @@ ax = plt.axes()
 scale = img[st].shape[0]/400
 for i in range(1,ntx-1):
   for j in range(1,nty-1):
-    if resGrid[i,j] < 800:
+    if resGrid[i,j] < maxRes:
       ax.arrow((i+.5)*tx, (j+.5)*ty, df[i,j,0]*scale*norm, df[i,j,1]*scale*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='red', ec='red')
     else:
       ax.arrow((i+.5)*tx, (j+.5)*ty, df[i,j,0]*scale*norm, df[i,j,1]*scale*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='blue', ec='blue')

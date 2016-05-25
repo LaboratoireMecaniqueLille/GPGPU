@@ -10,17 +10,19 @@ import cv2
 
 import pycuda.autoinit
 
+def redStr(*s):
+  return '\033[31m\033[1m'+str.join(" ",[str(i) for i in s])+'\033[0m'
 
 def debug(*args):
   return
-
 
 class gridCorrel:
   """
   Class meant to continuously compute the local displacement of an image compared to an original one
   """
-  def __init__(self,originalImage,numTilesX,numTilesY,verbose=0,kernelFile="kernels.cu"):
+  def __init__(self,originalImage,numTilesX,numTilesY,**kwargs):
     # -- To print debug infos if asked to (3 different levels of verbosity) --
+    verbose=kwargs.get('verbose',0)
     if verbose:
       global debug
       def debug(l,*args):
@@ -31,14 +33,17 @@ class gridCorrel:
     self.orig = originalImage
     assert type(self.orig)==np.ndarray,"The original image must be a numpy.ndarray"
     assert len(self.orig.shape) == 2,"The original image is not a 2D array"
-    self.iteration = range(10)
+    self.nIter = kwargs.get('iterations',10)
+    self.iteration = range(self.nIter)
+    self.nAdds = kwargs.get('adds',3) # Number of times a computed vector will be added unless residual increases (and each times multiplied by iterCoeff[i])
     self.shape = originalImage.shape
     self.w,self.h = self.shape
     self.numTilesX,self.numTilesY = numTilesX,numTilesY
     self.dispField = np.zeros((self.numTilesX,self.numTilesY,2),np.float32)
     self.lastX = 0
     self.lastY = 0
-    self.iterCoeffs = [1.2,2,5,5,5,5,5,10]
+    self.iterCoeffs = kwargs.get('addCoeffs',[1.2,2,5]+[5]*max(0,self.nAdds-3))
+    self.maxRes = kwargs.get('maxRes',800) # Max residual before considering convergence failed
     self.t_w,self.t_h = self.w/numTilesX,self.h/numTilesY
     self.it_w,self.it_h = int(round(self.t_w)),int(round(self.t_h))
     self.t_shape = self.it_w,self.it_h
@@ -51,10 +56,10 @@ class gridCorrel:
     self.res= np.zeros((self.numTilesX,self.numTilesY))
 
     debug(3,"Dimensions:",self.w,self.h)
-    debug(2,"Grid:",self.grid)
-    debug(2,"Block:",self.block)
-    debug(2,"Tile grid:",self.t_grid)
-    debug(2,"Tile block",self.t_block)
+    debug(3,"Grid:",self.grid)
+    debug(3,"Block:",self.block)
+    debug(3,"Tile grid:",self.t_grid)
+    debug(3,"Tile block",self.t_block)
 
     # -- Creating arrays used to store images --
     self.devDiff = gpuarray.GPUArray(self.t_shape,np.float32)
@@ -64,6 +69,7 @@ class gridCorrel:
     self.devTempY = gpuarray.GPUArray((self.it_w,self.it_h),np.float32)
 
     # -- Reading kernel file (note: there are #DEFINE directives to set the img and tile size at compilation time) --
+    kernelFile = kwargs.get('kernelFile',"kernels.cu")
     with open(kernelFile,"r") as f:
       self.mod = SourceModule(f.read()%(self.shape+self.t_shape))
 
@@ -186,8 +192,11 @@ class gridCorrel:
       newX,newY = self.__iterate(tx,ty,x,y)
       if (newX,newY) == (x,y):
         debug(3,"Not moving anymore, stopping iterations")
+        #debug(2,"Displacement:",x,",",y,"\nResidual:",self.res[tx,ty])
+        debug(2,"Displacement:",x,",",y,"\nResidual:",self.res[tx,ty] if self.res[tx,ty]<self.maxRes else redStr(self.res[tx,ty]))
         return x,y
       x,y = newX,newY
+    debug(2,"Displacement:",x,",",y,"\nResidual:",self.res[tx,ty] if self.res[tx,ty]<self.maxRes else redStr(self.res[tx,ty]))
     return x,y
   
   def __iterate(self,tx,ty,x,y):
@@ -197,7 +206,7 @@ class gridCorrel:
     ## -- Get the research direction  --
     vx,vy = self.__gradientDescent(tx,ty,x,y)
     debug(3,"vx=",vx,"vy=",vy)
-    for c in range(3):
+    for c in range(self.nAdds):
       # -- Still approaching the minimum ? Let's go faster (see self.iterCoeffs in __init__, the more iterations it takes, the faster we grow the direction)
       vx*=self.iterCoeffs[c]
       vy*=self.iterCoeffs[c]
