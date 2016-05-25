@@ -36,6 +36,8 @@ class gridCorrel:
     self.w,self.h = self.shape
     self.numTilesX,self.numTilesY = numTilesX,numTilesY
     self.dispField = np.zeros((self.numTilesX,self.numTilesY,2),np.float32)
+    self.lastX = 0
+    self.lastY = 0
     self.iterCoeffs = [1.2,2,5,5,5,5,5,10]
     self.t_w,self.t_h = self.w/numTilesX,self.h/numTilesY
     self.it_w,self.it_h = int(round(self.t_w)),int(round(self.t_h))
@@ -46,7 +48,7 @@ class gridCorrel:
     self.block = (min(self.w,32),min(self.h,32),1)
     self.t_grid = ((self.it_w+31)//32,((self.it_h+31)//32))
     self.t_block = (min(self.it_w,32),min(self.it_h,32),1)
-    self.resGrid = np.zeros((self.numTilesX,self.numTilesY))
+    self.res= np.zeros((self.numTilesX,self.numTilesY))
 
     debug(3,"Dimensions:",self.w,self.h)
     debug(2,"Grid:",self.grid)
@@ -135,17 +137,25 @@ class gridCorrel:
     tx*self.normalizedTileWidth,ty*self.normalizedTileHeight,\
     x/self.w,y/self.h)
 
-  def __residual(self):
+  def __residual(self,tx,ty,x,y):
     """
     Wrapper to compute the residual once self.devDiff has been computed
     """
+    if (x,y) != (self.lastX,self.lastY): # To compute the difference only if necessarry
+      self.lastX=x
+      self.lastT=y
+      self.__computeDiff(tx,ty,x,y)
     return self.__squareResidual(self.devDiff).get()/self.t_w/self.t_h
 
-  def __gradientDescent(self,tx,ty):
+  def __gradientDescent(self,tx,ty,x,y):
     """
     Wrapper to search for the direction of convergence of the tile (tx,ty) once self.devDiff has been computed
     tx,ty: integers refering to the tile's coordinates
     """
+    if (x,y) != (self.lastX,self.lastY): # To compute the difference only if necessarry
+      self.lastX=x
+      self.lastT=y
+      self.__computeDiff(tx,ty,x,y)
     self.__gdProduct.prepared_call(self.t_grid,self.t_block,\
     self.devTempX.gpudata,self.devTempY.gpudata,\
     self.devDiff.gpudata,\
@@ -168,46 +178,46 @@ class gridCorrel:
     x,y=ox,oy
 
     # -- Computes the residual before iterating (sometimes the direction is wrong and increases the residual) --
-    self.__computeDiff(tx,ty,x,y)
-    res = self.__residual()
+    self.res[tx,ty] = self.__residual(tx,ty,x,y)
     # -- Let's start iterating ! --
     for i in self.iteration:
       debug(3,"Iteration",i)
       debug(3,"x=",x,"y=",y)
-      ## -- Get the research direction (self.devDiff has already been computed previously) --
-      vx,vy = self.__gradientDescent(tx,ty)
-      debug(3,"vx=",vx,"vy=",vy)
-      for c in range(3):
-        # -- Still approaching the minimum ? Let's go faster (see self.iterCoeffs in __init__, the more iterations it takes, the faster we grow the direction)
-        vx*=self.iterCoeffs[c]
-        vy*=self.iterCoeffs[c]
-        # -- Updating x and y --
-        x-=vx
-        y-=vy
-        # -- Compute new diff --
-        self.__computeDiff(tx,ty,x,y)
-        oldres=res
-        # -- Update residual --
-        res = self.__residual()
-        debug(3,"Add",c,":\nvx=",vx,"vy=",vy,", residual:",res)
-        if res > oldres:
-          # -- Oops, went to far ! Let's revert this iteration and start with a new direction --
-          debug(3,"Residual increasing, reverting")
-          x+=vx
-          y+=vy
-          res = oldres
-          break
-      if c == 0:
-        """
-        If c==0, we did not even add the vector once, we are either really close to the solution, or completely off. In either case, looping again would lead to the exact same result and there is not much we can do without significant time loss, so let's move on.
-        """
-        debug(3,"Cannot progress any further, returning.")
-        debug(2,"Final residual:",res,"\nDisplacement:",x,",",y)
-        self.resGrid[tx,ty] = res
+      newX,newY = self.__iterate(tx,ty,x,y)
+      if (newX,newY) == (x,y):
+        debug(3,"Not moving anymore, stopping iterations")
         return x,y
-    debug(2,"Final residual:",res,"\nDisplacement:",x,",",y)
-    self.resGrid[tx,ty] = res
+      x,y = newX,newY
     return x,y
+  
+  def __iterate(self,tx,ty,x,y):
+    """
+    Computes the research direction to converge towards the lowest residual and adds it multiple times to approach the solution
+    """
+    ## -- Get the research direction  --
+    vx,vy = self.__gradientDescent(tx,ty,x,y)
+    debug(3,"vx=",vx,"vy=",vy)
+    for c in range(3):
+      # -- Still approaching the minimum ? Let's go faster (see self.iterCoeffs in __init__, the more iterations it takes, the faster we grow the direction)
+      vx*=self.iterCoeffs[c]
+      vy*=self.iterCoeffs[c]
+      # -- Updating x and y --
+      x-=vx
+      y-=vy
+      # -- Compute new diff --
+      oldres=self.res[tx,ty]
+      # -- Update residual --
+      self.res[tx,ty] = self.__residual(tx,ty,x,y)
+      debug(3,"Add",c,":\nvx=",vx,"vy=",vy,", residual:",self.res[tx,ty])
+      if self.res[tx,ty] > oldres:
+        # -- Oops, went to far ! Let's revert this iteration and start with a new direction --
+        debug(3,"Residual increasing, reverting")
+        x+=vx
+        y+=vy
+        self.res[tx,ty] = oldres
+        break
+    return x,y
+
 
   def getDisplacementField(self,img_d):
     """
@@ -228,8 +238,8 @@ class gridCorrel:
       #"""
         self.dispField[i,j,:] = self.__getTileDisplacement(i,j,*self.dispField[i,j,:])
 
-    debug(1,"Average residual:",self.resGrid.mean())
-    debug(1,(self.resGrid<600).sum(),"/",self.numTilesX*self.numTilesY,"below 600")
+    debug(1,"Average residual:",self.res.mean())
+    debug(1,(self.res<600).sum(),"/",self.numTilesX*self.numTilesY,"below 600")
     return self.dispField
     
   def getLastResGrid(self):
@@ -237,7 +247,7 @@ class gridCorrel:
     Return the residuals of the tiles after calling getDisplacementField()
     Can be useful to remove incorrect data
     """
-    return self.resGrid
+    return self.res
 
   def setOriginalDisplacement(self,array):
     """
