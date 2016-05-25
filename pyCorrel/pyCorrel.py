@@ -248,7 +248,7 @@ class gridCorrel:
         self.dispField[i,j,:] = self.__getTileDisplacement(i,j,*self.dispField[i,j,:])
 
     debug(1,"Average residual:",self.res.mean())
-    debug(1,(self.res<600).sum(),"/",self.numTilesX*self.numTilesY,"below 600")
+    debug(1,(self.res<self.maxRes).sum(),"/",self.numTilesX*self.numTilesY,"below",maxRes)
     return self.dispField
     
   def getLastResGrid(self):
@@ -265,6 +265,8 @@ class gridCorrel:
     assert array.shape == (self.numTilesX,self.numTilesY,2),"Incorrect initialisation of the displacement field"
     self.dispField=array
 
+
+
 class Resize:
   """
   Class meant to resize 2D images using linear interpolation, accelerated by GPU
@@ -272,7 +274,7 @@ class Resize:
   """
   def __init__(self):
     """
-    No parameters required, juste to initialize and compile the kernel and configure the texture
+    No parameters required, just to initialize and compile the kernel and configure the texture
     """
     mod = SourceModule("""
   texture<float, cudaTextureType2D, cudaReadModeElementType> tex;
