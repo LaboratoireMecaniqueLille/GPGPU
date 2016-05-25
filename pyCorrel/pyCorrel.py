@@ -171,7 +171,6 @@ class gridCorrel:
     vy = gpuarray.sum(self.devTempY).get()/(self.t_w*self.t_h)/32768
     return vx,vy
   
-
   def __getTileDisplacement(self,tx,ty,ox=0,oy=0):
     """
     Used to compute each vector of the dispacement field
@@ -227,7 +226,6 @@ class gridCorrel:
         break
     return x,y
 
-
   def getDisplacementField(self,img_d):
     """
     Takes an image similar to the original image and will return the local displacement of each tile as a numpy array
@@ -248,7 +246,7 @@ class gridCorrel:
         self.dispField[i,j,:] = self.__getTileDisplacement(i,j,*self.dispField[i,j,:])
 
     debug(1,"Average residual:",self.res.mean())
-    debug(1,(self.res<self.maxRes).sum(),"/",self.numTilesX*self.numTilesY,"below",maxRes)
+    debug(1,(self.res<self.maxRes).sum(),"/",self.numTilesX*self.numTilesY,"below",self.maxRes)
     return self.dispField
     
   def getLastResGrid(self):
@@ -264,6 +262,22 @@ class gridCorrel:
     """
     assert array.shape == (self.numTilesX,self.numTilesY,2),"Incorrect initialisation of the displacement field"
     self.dispField=array
+
+  def showDisplacement(self,**kwargs):
+    import matplotlib.pyplot as plt
+    norm = kwargs.get('norm',2)
+    scale = kwargs.get('scale',min(self.w,self.h)/400.)
+    plt.imshow(self.orig,cmap = plt.get_cmap('gray'), vmin = 0, vmax = 255)
+    ax=plt.axes()
+    for i in range(1,self.numTilesX-1):
+      for j in range(1,self.numTilesY-1):
+        if self.res[i,j] < self.maxRes:
+          ax.arrow((i+.5)*self.t_w, (j+.5)*self.t_h, self.dispField[i,j,0]*scale*norm, self.dispField[i,j,1]*scale*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='red', ec='red')
+        else:
+          ax.arrow((i+.5)*self.t_w, (j+.5)*self.t_h, self.dispField[i,j,0]*scale*norm, self.dispField[i,j,1]*scale*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='blue', ec='blue')
+    plt.show()
+
+
 
 
 

@@ -36,7 +36,7 @@ correl = [0]*stages
 maxRes=800
 
 for stage in range(stages):
-  correl[stage] = gridCorrel(img[stage],ntx,nty,verbose=2,maxRes=maxRes)
+  correl[stage] = gridCorrel(img[stage],ntx,nty,verbose=1,maxRes=maxRes)
 
 df=np.zeros((ntx,nty,2),np.float32)
 for stage in reversed(range(stages)):
@@ -46,9 +46,10 @@ for stage in reversed(range(stages)):
   df = correl[stage].getDisplacementField(img_d[stage])
   t2 = time()
   print("stage",stage,"duration:",1000*(t2-t1),"ms.")
-resGrid = correl[0].getLastResGrid()
 
+correl[0].showDisplacement()
 
+"""
 st = 0 # Stage to visualize
 norm = 2
 tx,ty=img[st].shape[0]/ntx,img[st].shape[1]/nty
@@ -62,3 +63,4 @@ for i in range(1,ntx-1):
     else:
       ax.arrow((i+.5)*tx, (j+.5)*ty, df[i,j,0]*scale*norm, df[i,j,1]*scale*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='blue', ec='blue')
 plt.show()
+"""
