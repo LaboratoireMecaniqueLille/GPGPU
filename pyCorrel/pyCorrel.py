@@ -53,7 +53,7 @@ class gridCorrel:
     self.block = (min(self.w,32),min(self.h,32),1)
     self.t_grid = ((self.it_w+31)//32,((self.it_h+31)//32))
     self.t_block = (min(self.it_w,32),min(self.it_h,32),1)
-    self.res= np.zeros((self.numTilesX,self.numTilesY))
+    self.res= np.ones((self.numTilesX,self.numTilesY))*1e38
 
     debug(3,"Dimensions:",self.w,self.h)
     debug(3,"Grid:",self.grid)
@@ -61,7 +61,7 @@ class gridCorrel:
     debug(3,"Tile grid:",self.t_grid)
     debug(3,"Tile block",self.t_block)
 
-    # -- Creating arrays used to store images --
+    # -- Creating GPU arrays used to store images --
     self.devDiff = gpuarray.GPUArray(self.t_shape,np.float32)
     self.devGradX = gpuarray.GPUArray(self.shape,np.float32)
     self.devGradY = gpuarray.GPUArray(self.shape,np.float32)
@@ -204,7 +204,7 @@ class gridCorrel:
     """
     ## -- Get the research direction  --
     vx,vy = self.__gradientDescent(tx,ty,x,y)
-    debug(3,"vx=",vx,"vy=",vy)
+    debug(3,"vx=",vx,"vy=",vy,"oldres:",self.res[tx,ty])
     for c in range(self.nAdds):
       # -- Still approaching the minimum ? Let's go faster (see self.iterCoeffs in __init__, the more iterations it takes, the faster we grow the direction)
       vx*=self.iterCoeffs[c]
@@ -226,9 +226,10 @@ class gridCorrel:
         break
     return x,y
 
-  def getDisplacementField(self,img_d):
+  def getDisplacementFieldNoFiltering(self,img_d):
     """
     Takes an image similar to the original image and will return the local displacement of each tile as a numpy array
+    unlike getDisplcementField(), it operates independently on each tile, making the per-iteration field filtering impossible
     """
     assert img_d.shape == self.shape,"Displaced image has a different size"
     debug(1,"Working on a",self.w,"x",self.h,"image")
@@ -248,6 +249,41 @@ class gridCorrel:
     debug(1,"Average residual:",self.res.mean())
     debug(1,(self.res<self.maxRes).sum(),"/",self.numTilesX*self.numTilesY,"below",self.maxRes)
     return self.dispField
+
+
+  def getDisplacementField(self,img_d):
+    assert img_d.shape == self.shape,"Displaced image has a different size"
+    debug(1,"Working on a",self.w,"x",self.h,"image")
+    self.img_dArray = cuda.matrix_to_array(img_d,"C")
+    self.tex_d.set_array(self.img_dArray)
+    converged = -np.ones((self.numTilesX,self.numTilesY),dtype=int)
+    for i in self.iteration:
+      #print("Iteration",i)
+      #    """
+      for tx in range(self.numTilesX):
+        for ty in range(self.numTilesY):
+          if converged[tx,ty] >= 0:
+            break
+          if self.res[tx,ty] < self.maxRes/20:
+            debug(3,"Residual low enough:",self.res[tx,ty],". Marking as converged")
+            converged[tx,ty] = i
+            break
+          """
+          tx,ty = 8,8
+          #"""
+          x,y = self.__iterate(tx,ty,*self.dispField[tx,ty,:])
+          if np.array_equal((x,y),self.dispField[tx,ty,:]):
+            debug(3,"Not moving anymore, marking tile as converged...")
+            converged[tx,ty] = i
+          else:
+            self.dispField[tx,ty,:] = [x,y]
+      #TODO: place filter function here
+    debug(3,converged)
+    debug(1,"Average number of iterations:",np.mean(np.where(converged<0,i,converged)))
+    debug(1,"Average residual:",self.res.mean())
+    debug(1,(self.res<self.maxRes).sum(),"/",self.numTilesX*self.numTilesY,"below",self.maxRes)
+    return self.dispField
+
     
   def getLastResGrid(self):
     """
