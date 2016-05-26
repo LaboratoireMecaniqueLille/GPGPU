@@ -33,7 +33,7 @@ class gridCorrel:
     self.orig = originalImage
     assert type(self.orig)==np.ndarray,"The original image must be a numpy.ndarray"
     assert len(self.orig.shape) == 2,"The original image is not a 2D array"
-    self.nIter = kwargs.get('iterations',10)
+    self.nIter = kwargs.get('iterations',3)
     self.iteration = range(self.nIter)
     self.nAdds = kwargs.get('adds',3) # Number of times a computed vector will be added unless residual increases (and each times multiplied by iterCoeff[i])
     self.shape = originalImage.shape
@@ -42,7 +42,7 @@ class gridCorrel:
     self.dispField = np.zeros((self.numTilesX,self.numTilesY,2),np.float32)
     self.lastX = 0
     self.lastY = 0
-    self.iterCoeffs = kwargs.get('addCoeffs',[1.2,2,5]+[5]*max(0,self.nAdds-3))
+    self.iterCoeffs = kwargs.get('addCoeffs',[2,5,8]+[10]*max(0,self.nAdds-3))
     self.maxRes = kwargs.get('maxRes',800) # Max residual before considering convergence failed
     self.t_w,self.t_h = self.w/numTilesX,self.h/numTilesY
     self.it_w,self.it_h = int(round(self.t_w)),int(round(self.t_h))
@@ -277,12 +277,15 @@ class gridCorrel:
             converged[tx,ty] = i
           else:
             self.dispField[tx,ty,:] = [x,y]
-      #TODO: place filter function here
+      self.__filterDispField()
     debug(3,converged)
     debug(1,"Average number of iterations:",np.mean(np.where(converged<0,i,converged)))
     debug(1,"Average residual:",self.res.mean())
     debug(1,(self.res<self.maxRes).sum(),"/",self.numTilesX*self.numTilesY,"below",self.maxRes)
     return self.dispField
+
+  def __filterDispField(self):
+    pass
 
     
   def getLastResGrid(self):
