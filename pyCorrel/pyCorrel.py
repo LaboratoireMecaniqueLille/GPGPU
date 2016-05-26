@@ -54,7 +54,9 @@ class gridCorrel:
     self.t_grid = ((self.it_w+31)//32,((self.it_h+31)//32))
     self.t_block = (min(self.it_w,32),min(self.it_h,32),1)
     self.res= np.ones((self.numTilesX,self.numTilesY))*1e38
-    self.filterMatrix=np.array([[.1,.1,.1],[.1,.2,.1],[.1,.1,.1]])
+    cen = .3
+    bor = (1-cen)/8.
+    self.filterMatrix=np.array([[bor,bor,bor],[bor,cen,bor],[bor,bor,bor]])
 
     debug(3,"Dimensions:",self.w,self.h)
     debug(3,"Grid:",self.grid)
@@ -236,48 +238,23 @@ class gridCorrel:
     self.t2 += time()
     return x,y
 
-  def getDisplacementFieldNoFiltering(self,img_d):
-    """
-    Takes an image similar to the original image and will return the local displacement of each tile as a numpy array
-    unlike getDisplcementField(), it operates independently on each tile, making the per-iteration field filtering impossible
-    """
-    assert img_d.shape == self.shape,"Displaced image has a different size"
-    debug(1,"Working on a",self.w,"x",self.h,"image")
-    self.img_dArray = cuda.matrix_to_array(img_d,"C")
-    self.tex_d.set_array(self.img_dArray)
-    #Uncomment the following line to work on a single tile for debugging/tweaking
-    #"""
-    for i in range(self.numTilesX):
-      for j in range(self.numTilesY):
-        """
-    i,j = 8,8
-    if True:
-      if True:
-      #"""
-        self.dispField[i,j,:] = self.__getTileDisplacement(i,j,*self.dispField[i,j,:])
-
-    debug(1,"Average residual:",self.res.mean())
-    debug(1,(self.res<self.maxRes).sum(),"/",self.numTilesX*self.numTilesY,"below",self.maxRes)
-    return self.dispField
-
-
   def getDisplacementField(self,img_d):
     assert img_d.shape == self.shape,"Displaced image has a different size"
     debug(1,"Working on a",self.w,"x",self.h,"image")
     self.img_dArray = cuda.matrix_to_array(img_d,"C")
     self.tex_d.set_array(self.img_dArray)
-    converged = -np.ones((self.numTilesX,self.numTilesY),dtype=int)
+    self.converged = -np.ones((self.numTilesX,self.numTilesY),dtype=int)
     t0=t1=0
     for i in self.iteration:
       #print("Iteration",i)
       #    """
       for tx in range(self.numTilesX):
         for ty in range(self.numTilesY):
-          if converged[tx,ty] >= 0:
+          if self.converged[tx,ty] >= 0:
             break
           if self.res[tx,ty] < self.maxRes/20:
             debug(3,"Residual low enough:",self.res[tx,ty],". Marking as converged")
-            converged[tx,ty] = i
+            self.converged[tx,ty] = i
             break
           """
           tx,ty = 8,8
@@ -285,12 +262,12 @@ class gridCorrel:
           x,y = self.__iterate(tx,ty,*self.dispField[tx,ty,:]) # ~98% of execution time
           if np.array_equal((x,y),self.dispField[tx,ty,:]):
             debug(3,"Not moving anymore, marking tile as converged...")
-            converged[tx,ty] = i
+            self.converged[tx,ty] = i
           else:
             self.dispField[tx,ty,:] = [x,y]
       self.__filterDispField()
-    debug(3,converged)
-    debug(1,"Average number of iterations:",np.mean(np.where(converged<0,i,converged)))
+    debug(3,self.converged)
+    debug(1,"Average number of iterations:",np.mean(np.where(self.converged<0,i,self.converged)))
     debug(1,"Average residual:",self.res.mean())
     debug(1,(self.res<self.maxRes).sum(),"/",self.numTilesX*self.numTilesY,"below",self.maxRes)
     debug(1,"T01:",(self.t1-self.t0)*1000,"ms.")
@@ -298,8 +275,15 @@ class gridCorrel:
     return self.dispField
 
   def __filterDispField(self):
-    self.dispField[:,:,0] = signal.convolve2d(self.dispField[:,:,0],self.filterMatrix,mode='same',boundary='symm')
-    self.dispField[:,:,1] = signal.convolve2d(self.dispField[:,:,1],self.filterMatrix,mode='same',boundary='symm')
+    """
+    Filters the direction after each iteration (and keeps the 'already good' ones as is)
+    Great results !
+    (but is it fast ?)
+    """
+    #TODO:  See the border issue with filtering (diverging because of an out of bound value)
+    #       Allow changing of the filterfunction (simply by setting weight of central vector or advanced by passing directly a function
+    self.dispField[:,:,0] = np.where(self.converged<0,signal.convolve2d(self.dispField[:,:,0],self.filterMatrix,mode='same',boundary='symm'),self.dispField[:,:,0])
+    self.dispField[:,:,1] = np.where(self.converged<0,signal.convolve2d(self.dispField[:,:,1],self.filterMatrix,mode='same',boundary='symm'),self.dispField[:,:,1])
     
   def getLastResGrid(self):
     """
@@ -319,14 +303,25 @@ class gridCorrel:
     import matplotlib.pyplot as plt
     norm = kwargs.get('norm',10)
     scale = kwargs.get('scale',min(self.w,self.h)/400.)
+    border=kwargs.get('border',False)
     plt.imshow(self.orig,cmap = plt.get_cmap('gray'), vmin = 0, vmax = 255)
     ax=plt.axes()
-    for i in range(1,self.numTilesX-1):
-      for j in range(1,self.numTilesY-1):
-        if self.res[i,j] < self.maxRes:
-          ax.arrow((i+.5)*self.t_w, (j+.5)*self.t_h, self.dispField[i,j,0]*norm, self.dispField[i,j,1]*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='red', ec='red')
+    if border:
+      rangeX=range(self.numTilesX)
+      rangeY=range(self.numTilesY)
+    else:
+      rangeX = range(1,self.numTilesX-1)
+      rangeY = range(1,self.numTilesY-1)
+
+    for i in rangeX:
+      for j in rangeY:
+        if self.converged[i,j]>=0:
+          color='green'
+        elif self.res[i,j] < self.maxRes:
+          color='red'
         else:
-          ax.arrow((i+.5)*self.t_w, (j+.5)*self.t_h, self.dispField[i,j,0]*norm, self.dispField[i,j,1]*norm, width = scale, head_width=4*scale, head_length=8*scale, fc='blue', ec='blue')
+          color='blue'
+        ax.arrow((i+.5)*self.t_w, (j+.5)*self.t_h, self.dispField[i,j,0]*norm, self.dispField[i,j,1]*norm, width = scale, head_width=4*scale, head_length=8*scale, fc=color, ec=color)
     plt.show()
 
 
