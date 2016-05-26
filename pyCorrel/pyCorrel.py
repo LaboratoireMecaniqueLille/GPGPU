@@ -5,8 +5,8 @@ import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 import pycuda.gpuarray as gpuarray
 from pycuda.reduction import ReductionKernel
-import sys
-import cv2
+from time import time
+from scipy import signal
 
 import pycuda.autoinit
 
@@ -54,6 +54,7 @@ class gridCorrel:
     self.t_grid = ((self.it_w+31)//32,((self.it_h+31)//32))
     self.t_block = (min(self.it_w,32),min(self.it_h,32),1)
     self.res= np.ones((self.numTilesX,self.numTilesY))*1e38
+    self.filterMatrix=np.array([[.1,.1,.1],[.1,.2,.1],[.1,.1,.1]])
 
     debug(3,"Dimensions:",self.w,self.h)
     debug(3,"Grid:",self.grid)
@@ -114,6 +115,11 @@ class gridCorrel:
 
     # -- Assigning the first image --
     self.setOriginalImage(self.orig)
+
+    # -- For profiling --
+    self.t0 = 0
+    self.t1 = 0
+    self.t2 = 0
 
   def setOriginalImage(self,image):
     """
@@ -202,8 +208,11 @@ class gridCorrel:
     """
     Computes the research direction to converge towards the lowest residual and adds it multiple times to approach the solution
     """
+    #TODO: profile and optimize (98% of execution time is this method)
     ## -- Get the research direction  --
+    self.t0 += time()
     vx,vy = self.__gradientDescent(tx,ty,x,y)
+    self.t1 += time()
     debug(3,"vx=",vx,"vy=",vy,"oldres:",self.res[tx,ty])
     for c in range(self.nAdds):
       # -- Still approaching the minimum ? Let's go faster (see self.iterCoeffs in __init__, the more iterations it takes, the faster we grow the direction)
@@ -224,6 +233,7 @@ class gridCorrel:
         y+=vy
         self.res[tx,ty] = oldres
         break
+    self.t2 += time()
     return x,y
 
   def getDisplacementFieldNoFiltering(self,img_d):
@@ -257,6 +267,7 @@ class gridCorrel:
     self.img_dArray = cuda.matrix_to_array(img_d,"C")
     self.tex_d.set_array(self.img_dArray)
     converged = -np.ones((self.numTilesX,self.numTilesY),dtype=int)
+    t0=t1=0
     for i in self.iteration:
       #print("Iteration",i)
       #    """
@@ -271,7 +282,7 @@ class gridCorrel:
           """
           tx,ty = 8,8
           #"""
-          x,y = self.__iterate(tx,ty,*self.dispField[tx,ty,:])
+          x,y = self.__iterate(tx,ty,*self.dispField[tx,ty,:]) # ~98% of execution time
           if np.array_equal((x,y),self.dispField[tx,ty,:]):
             debug(3,"Not moving anymore, marking tile as converged...")
             converged[tx,ty] = i
@@ -282,11 +293,13 @@ class gridCorrel:
     debug(1,"Average number of iterations:",np.mean(np.where(converged<0,i,converged)))
     debug(1,"Average residual:",self.res.mean())
     debug(1,(self.res<self.maxRes).sum(),"/",self.numTilesX*self.numTilesY,"below",self.maxRes)
+    debug(1,"T01:",(self.t1-self.t0)*1000,"ms.")
+    debug(1,"T12:",(self.t2-self.t1)*1000,"ms.")
     return self.dispField
 
   def __filterDispField(self):
-    pass
-
+    self.dispField[:,:,0] = signal.convolve2d(self.dispField[:,:,0],self.filterMatrix,mode='same',boundary='symm')
+    self.dispField[:,:,1] = signal.convolve2d(self.dispField[:,:,1],self.filterMatrix,mode='same',boundary='symm')
     
   def getLastResGrid(self):
     """

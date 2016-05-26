@@ -32,7 +32,7 @@ maxRes=800
 
 # -- creating the table of stages gridCorrel instances --
 for stage in range(stages):
-  correl[stage] = gridCorrel(img[stage],ntx,nty,verbose=1,maxRes=maxRes/(2**stage))
+  correl[stage] = gridCorrel(img[stage],ntx,nty,verbose=1,maxRes=maxRes-100*stage)
 # Note: even if the residual is normalized (divided by the number of pixels), a resampled image will have a lower residual, so maxRes is not the same on every stages
 
 # -- Starting the critical part (to be run at the fastest possible refresh rate)
