@@ -18,7 +18,7 @@ def debug(*args):
 
 class gridCorrel:
   """
-  Class meant to continuously compute the local displacement of an image compared to an original one
+  Class meant to repeatedly compute the local displacement of an image compared to an original one
   """
   def __init__(self,originalImage,numTilesX,numTilesY,**kwargs):
     # -- To print debug infos if asked to (3 different levels of verbosity) --
@@ -33,9 +33,9 @@ class gridCorrel:
     self.orig = originalImage
     assert type(self.orig)==np.ndarray,"The original image must be a numpy.ndarray"
     assert len(self.orig.shape) == 2,"The original image is not a 2D array"
-    self.nIter = kwargs.get('iterations',3)
+    self.nIter = kwargs.get('iterations',2)
     self.iteration = range(self.nIter)
-    self.nAdds = kwargs.get('adds',3) # Number of times a computed vector will be added unless residual increases (and each times multiplied by iterCoeff[i])
+    self.nAdds = kwargs.get('adds',2) # Number of times a computed vector will be added unless residual increases (and each times multiplied by iterCoeff[i])
     self.shape = originalImage.shape
     self.w,self.h = self.shape
     self.numTilesX,self.numTilesY = numTilesX,numTilesY
@@ -54,9 +54,10 @@ class gridCorrel:
     self.t_grid = ((self.it_w+31)//32,((self.it_h+31)//32))
     self.t_block = (min(self.it_w,32),min(self.it_h,32),1)
     self.res= np.ones((self.numTilesX,self.numTilesY))*1e38
-    cen = .3
+    cen = .7
     bor = (1-cen)/8.
     self.filterMatrix=np.array([[bor,bor,bor],[bor,cen,bor],[bor,bor,bor]])
+    self.customFilter = kwargs.get('filter',False)
 
     debug(3,"Dimensions:",self.w,self.h)
     debug(3,"Grid:",self.grid)
@@ -252,7 +253,7 @@ class gridCorrel:
         for ty in range(self.numTilesY):
           if self.converged[tx,ty] >= 0:
             break
-          if self.res[tx,ty] < self.maxRes/20:
+          if self.res[tx,ty] < self.maxRes/100:
             debug(3,"Residual low enough:",self.res[tx,ty],". Marking as converged")
             self.converged[tx,ty] = i
             break
@@ -282,8 +283,12 @@ class gridCorrel:
     """
     #TODO:  See the border issue with filtering (diverging because of an out of bound value)
     #       Allow changing of the filterfunction (simply by setting weight of central vector or advanced by passing directly a function
-    self.dispField[:,:,0] = np.where(self.converged<0,signal.convolve2d(self.dispField[:,:,0],self.filterMatrix,mode='same',boundary='symm'),self.dispField[:,:,0])
-    self.dispField[:,:,1] = np.where(self.converged<0,signal.convolve2d(self.dispField[:,:,1],self.filterMatrix,mode='same',boundary='symm'),self.dispField[:,:,1])
+    if self.customFilter:
+      self.dispField[:,:,0] = self.customFilter(self.deispField[:,:,0])
+      self.dispField[:,:,1] = self.customFilter(self.deispField[:,:,1])
+    else:
+      self.dispField[:,:,0] = np.where(self.converged<0,signal.convolve2d(self.dispField[:,:,0],self.filterMatrix,mode='same',boundary='fill'),self.dispField[:,:,0])
+      self.dispField[:,:,1] = np.where(self.converged<0,signal.convolve2d(self.dispField[:,:,1],self.filterMatrix,mode='same',boundary='fill'),self.dispField[:,:,1])
     
   def getLastResGrid(self):
     """
@@ -316,9 +321,9 @@ class gridCorrel:
     for i in rangeX:
       for j in rangeY:
         if self.converged[i,j]>=0:
-          color='green'
-        elif self.res[i,j] < self.maxRes:
           color='red'
+        elif self.res[i,j] < self.maxRes:
+          color='orange'
         else:
           color='blue'
         ax.arrow((i+.5)*self.t_w, (j+.5)*self.t_h, self.dispField[i,j,0]*norm, self.dispField[i,j,1]*norm, width = scale, head_width=4*scale, head_length=8*scale, fc=color, ec=color)
