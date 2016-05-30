@@ -5,7 +5,6 @@ import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 import pycuda.gpuarray as gpuarray
 from pycuda.reduction import ReductionKernel
-from time import time
 from scipy import signal
 
 import pycuda.autoinit
@@ -20,7 +19,7 @@ class gridCorrel:
   """
   Class meant to repeatedly compute the local displacement of an image compared to an original one
   """
-  def __init__(self,originalImage,numTilesX,numTilesY,**kwargs):
+  def __init__(self,originalImage,**kwargs):
     # -- To print debug infos if asked to (3 different levels of verbosity) --
     verbose=kwargs.get('verbose',0)
     if verbose:
@@ -38,21 +37,21 @@ class gridCorrel:
     self.nAdds = kwargs.get('adds',2) # Number of times a computed vector will be added unless residual increases (and each times multiplied by iterCoeff[i])
     self.shape = originalImage.shape
     self.w,self.h = self.shape
-    self.numTilesX,self.numTilesY = numTilesX,numTilesY
+    self.numTilesX,self.numTilesY = kwargs.get("numTiles",(16,16))
     self.dispField = np.zeros((self.numTilesX,self.numTilesY,2),np.float32)
     self.lastX = 0
     self.lastY = 0
     self.iterCoeffs = kwargs.get('addCoeffs',[2,5,8]+[10]*max(0,self.nAdds-3))
     self.maxRes = kwargs.get('maxRes',800) # Max residual before considering convergence failed
-    self.t_w,self.t_h = self.w/numTilesX,self.h/numTilesY
-    self.it_w,self.it_h = int(round(self.t_w)),int(round(self.t_h))
-    self.t_shape = self.it_w,self.it_h
+    self.t_shape = kwargs.get('tileSize',(int(round(self.w/self.numTilesX)),int(round(self.h/self.numTilesY))))
+    self.t_w,self.t_h = self.t_shape
+    #self.it_w,self.it_h = int(round(self.t_w)),int(round(self.t_h))
     self.normalizedTileWidth = self.t_w/self.w
     self.normalizedTileHeight = self.t_h/self.h
     self.grid = ((self.w+31)//32,(self.h+31)//32)
     self.block = (min(self.w,32),min(self.h,32),1)
-    self.t_grid = ((self.it_w+31)//32,((self.it_h+31)//32))
-    self.t_block = (min(self.it_w,32),min(self.it_h,32),1)
+    self.t_grid = ((self.t_w+31)//32,((self.t_h+31)//32))
+    self.t_block = (min(self.t_w,32),min(self.t_h,32),1)
     self.res= np.ones((self.numTilesX,self.numTilesY))*1e38
     cen = .7
     bor = (1-cen)/8.
@@ -69,8 +68,8 @@ class gridCorrel:
     self.devDiff = gpuarray.GPUArray(self.t_shape,np.float32)
     self.devGradX = gpuarray.GPUArray(self.shape,np.float32)
     self.devGradY = gpuarray.GPUArray(self.shape,np.float32)
-    self.devTempX = gpuarray.GPUArray((self.it_w,self.it_h),np.float32)
-    self.devTempY = gpuarray.GPUArray((self.it_w,self.it_h),np.float32)
+    self.devTempX = gpuarray.GPUArray((self.t_w,self.t_h),np.float32)
+    self.devTempY = gpuarray.GPUArray((self.t_w,self.t_h),np.float32)
 
     # -- Reading kernel file (note: there are #DEFINE directives to set the img and tile size at compilation time) --
     kernelFile = kwargs.get('kernelFile',"kernels.cu")
@@ -83,25 +82,11 @@ class gridCorrel:
     self.texGradX = self.mod.get_texref('texGradX')
     self.texGradY = self.mod.get_texref('texGradY')
 
-    self.tex.set_flags(cuda.TRSF_NORMALIZED_COORDINATES)
-    self.tex_d.set_flags(cuda.TRSF_NORMALIZED_COORDINATES)
-    self.texGradX.set_flags(cuda.TRSF_NORMALIZED_COORDINATES)
-    self.texGradY.set_flags(cuda.TRSF_NORMALIZED_COORDINATES)
-
-    self.tex.set_filter_mode(cuda.filter_mode.LINEAR)
-    self.tex_d.set_filter_mode(cuda.filter_mode.LINEAR)
-    self.texGradX.set_filter_mode(cuda.filter_mode.LINEAR)
-    self.texGradY.set_filter_mode(cuda.filter_mode.LINEAR)
-
-    self.tex.set_address_mode(0,cuda.address_mode.CLAMP)
-    self.tex_d.set_address_mode(0,cuda.address_mode.CLAMP)
-    self.texGradX.set_address_mode(0,cuda.address_mode.CLAMP)
-    self.texGradY.set_address_mode(0,cuda.address_mode.CLAMP)
-
-    self.tex.set_address_mode(1,cuda.address_mode.CLAMP)
-    self.tex_d.set_address_mode(1,cuda.address_mode.CLAMP)
-    self.texGradX.set_address_mode(1,cuda.address_mode.CLAMP)
-    self.texGradY.set_address_mode(1,cuda.address_mode.CLAMP)
+    for tex in [self.tex,self.tex_d,self.texGradX,self.texGradY]:
+      tex.set_flags(cuda.TRSF_NORMALIZED_COORDINATES)
+      tex.set_filter_mode(cuda.filter_mode.LINEAR)
+      tex.set_address_mode(0,cuda.address_mode.CLAMP)
+      tex.set_address_mode(1,cuda.address_mode.CLAMP)
 
     # -- Assigning kernels to functions --
     # To create the table of difference between original and corrected displaced texture 
@@ -118,11 +103,6 @@ class gridCorrel:
 
     # -- Assigning the first image --
     self.setOriginalImage(self.orig)
-
-    # -- For profiling --
-    self.t0 = 0
-    self.t1 = 0
-    self.t2 = 0
 
   def setOriginalImage(self,image):
     """
@@ -149,7 +129,7 @@ class gridCorrel:
     """
     self.__makeDiff.prepared_call(self.t_grid,self.t_block,\
     self.devDiff.gpudata,\
-    tx*self.normalizedTileWidth,ty*self.normalizedTileHeight,\
+    tx/self.numTilesX,ty/self.numTilesY,\
     x/self.w,y/self.h)
 
   def __residual(self,tx,ty,x,y):
@@ -174,7 +154,8 @@ class gridCorrel:
     self.__gdProduct.prepared_call(self.t_grid,self.t_block,\
     self.devTempX.gpudata,self.devTempY.gpudata,\
     self.devDiff.gpudata,\
-    tx*self.normalizedTileWidth,ty*self.normalizedTileHeight)
+    tx/self.numTilesX,ty/self.numTilesY)
+    #tx*self.normalizedTileWidth,ty*self.normalizedTileHeight)
 
     vx = gpuarray.sum(self.devTempX).get()/(self.t_w*self.t_h)/32768
     vy = gpuarray.sum(self.devTempY).get()/(self.t_w*self.t_h)/32768
@@ -191,7 +172,7 @@ class gridCorrel:
     debug(2,"Tile",tx,",",ty)
     x,y=ox,oy
 
-    # -- Computes the residual before iterating (sometimes the direction is wrong and increases the residual) --
+    # -- Computes the residual before iterating (sometimes the direction is somehow wrong and increases the residual in one iteration) --
     self.res[tx,ty] = self.__residual(tx,ty,x,y)
     # -- Let's start iterating ! --
     for i in self.iteration:
@@ -200,7 +181,6 @@ class gridCorrel:
       newX,newY = self.__iterate(tx,ty,x,y)
       if (newX,newY) == (x,y):
         debug(3,"Not moving anymore, stopping iterations")
-        #debug(2,"Displacement:",x,",",y,"\nResidual:",self.res[tx,ty])
         debug(2,"Displacement:",x,",",y,"\nResidual:",self.res[tx,ty] if self.res[tx,ty]<self.maxRes else redStr(self.res[tx,ty]))
         return x,y
       x,y = newX,newY
@@ -211,11 +191,9 @@ class gridCorrel:
     """
     Computes the research direction to converge towards the lowest residual and adds it multiple times to approach the solution
     """
-    #TODO: profile and optimize (98% of execution time is this method)
+    #TODO: profile and optimize
     ## -- Get the research direction  --
-    self.t0 += time()
     vx,vy = self.__gradientDescent(tx,ty,x,y)
-    self.t1 += time()
     debug(3,"vx=",vx,"vy=",vy,"oldres:",self.res[tx,ty])
     for c in range(self.nAdds):
       # -- Still approaching the minimum ? Let's go faster (see self.iterCoeffs in __init__, the more iterations it takes, the faster we grow the direction)
@@ -236,7 +214,6 @@ class gridCorrel:
         y+=vy
         self.res[tx,ty] = oldres
         break
-    self.t2 += time()
     return x,y
 
   def getDisplacementField(self,img_d):
@@ -271,25 +248,19 @@ class gridCorrel:
     debug(1,"Average number of iterations:",np.mean(np.where(self.converged<0,i,self.converged)))
     debug(1,"Average residual:",self.res.mean())
     debug(1,(self.res<self.maxRes).sum(),"/",self.numTilesX*self.numTilesY,"below",self.maxRes)
-    debug(1,"T01:",(self.t1-self.t0)*1000,"ms.")
-    debug(1,"T12:",(self.t2-self.t1)*1000,"ms.")
     return self.dispField
 
   def __filterDispField(self):
     """
     Filters the direction after each iteration (and keeps the 'already good' ones as is)
-    Great results !
-    (but is it fast ?)
     """
-    #TODO:  See the border issue with filtering (diverging because of an out of bound value)
-    #       Allow changing of the filterfunction (simply by setting weight of central vector or advanced by passing directly a function
     if self.customFilter:
-      self.dispField[:,:,0] = self.customFilter(self.deispField[:,:,0])
-      self.dispField[:,:,1] = self.customFilter(self.deispField[:,:,1])
+      self.dispField[:,:,0] = self.customFilter(self.dispField[:,:,0])
+      self.dispField[:,:,1] = self.customFilter(self.dispField[:,:,1])
     else:
       self.dispField[:,:,0] = np.where(self.converged<0,signal.convolve2d(self.dispField[:,:,0],self.filterMatrix,mode='same',boundary='fill'),self.dispField[:,:,0])
       self.dispField[:,:,1] = np.where(self.converged<0,signal.convolve2d(self.dispField[:,:,1],self.filterMatrix,mode='same',boundary='fill'),self.dispField[:,:,1])
-    
+
   def getLastResGrid(self):
     """
     Return the residuals of the tiles after calling getDisplacementField()
@@ -306,6 +277,7 @@ class gridCorrel:
 
   def showDisplacement(self,**kwargs):
     import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
     norm = kwargs.get('norm',10)
     scale = kwargs.get('scale',min(self.w,self.h)/400.)
     border=kwargs.get('border',False)
@@ -326,9 +298,71 @@ class gridCorrel:
           color='orange'
         else:
           color='blue'
-        ax.arrow((i+.5)*self.t_w, (j+.5)*self.t_h, self.dispField[i,j,0]*norm, self.dispField[i,j,1]*norm, width = scale, head_width=4*scale, head_length=8*scale, fc=color, ec=color)
+        ax.arrow((i+.5)/self.numTilesX*self.w, (j+.5)/self.numTilesX*self.h, self.dispField[i,j,0]*norm, self.dispField[i,j,1]*norm, width = scale, head_width=4*scale, head_length=8*scale, fc=color, ec=color)
+    ax.add_patch(patches.Rectangle((1.5*self.w/self.numTilesX,.5*self.w/self.numTilesY),self.t_w,self.t_h,fill=False,color='green',linewidth=3))
+    ax.add_patch(patches.Rectangle((.5*self.w/self.numTilesX,1.5*self.w/self.numTilesY),self.t_w,self.t_h,fill=False,color='green',linewidth=3))
+    ax.add_patch(patches.Rectangle((.5*self.w/self.numTilesX,.5*self.w/self.numTilesY),self.t_w,self.t_h,fill=False,color='yellow',linewidth=2))
     plt.show()
 
+
+class CorrelParam:
+  def __repr__(self):
+    try:
+      return "Image: {}x{}, grid: {}x{}, tile: {}x{}, maxRes: {}".format(self.shape[0],self.shape[1],self.gridShape[0],self.gridShape[1],self.it_w,self.it_h,self.maxRes)
+    except AttributeError:
+      return "Parameters not defined yet"
+
+  def __call__(self):
+    return {"numTiles":self.gridShape ,"tileSize":(self.it_w,self.it_h),"maxRes":self.maxRes}
+
+
+class PyramidalCorrel:
+  def __init__(self, image, numOfStages, gridShape,**kwargs):
+    self.verbose = kwargs.get("verbose",0)
+    self.R = Resize()
+    self.nStages = numOfStages
+    self.resamplingFactor=kwargs.get("factor",2) # The size factor between each stage of the pyramid
+    self.p = [CorrelParam() for i in range(self.nStages)]
+    self.p[0].shape = image.shape
+    self.p[0].gridShape = gridShape
+    
+
+    self.overlap = kwargs.get("overlap",1) # Tiles overlaping factor. 1 means tiles border are touching, 2 means tiles twice as big as overlap=1 (-> 4 times the surface)
+    self.p[0].maxRes = kwargs.get('maxRes',800)
+
+    self.img = [image]
+    for i in range(1,self.nStages):
+      self.img.append(self.R.resize(self.img[i-1],self.resamplingFactor))
+      self.p[i].shape = self.img[i].shape
+    self.prepareParameters()
+    self.correl = []
+    for i in range(self.nStages):
+      kwargs.update(self.p[i]())
+      self.correl.append(gridCorrel(self.img[i],**kwargs))
+
+
+  def prepareParameters(self):
+    for i in range(self.nStages):
+      if i != 0:
+        self.p[i].gridShape = int(round(self.p[0].gridShape[0]/self.resamplingFactor**i)),\
+        int(round(self.p[0].gridShape[1]/self.resamplingFactor**i))
+
+        self.p[i].maxRes = self.p[i-1].maxRes/(1+self.resamplingFactor)*2 # Completely empirical (to confirm)
+
+      self.p[i].t_w = self.overlap*self.p[i].shape[0]/self.p[i].gridShape[0]
+      self.p[i].t_h = self.overlap*self.p[i].shape[1]/self.p[i].gridShape[1]
+      self.p[i].it_w = int(round(self.p[i].t_w))
+      self.p[i].it_h = int(round(self.p[i].t_h))
+      if self.verbose:
+        print("Parameters for stage {}".format(i),self.p[i])
+
+  def compute(self, img_d):
+    img_d = [img_d]
+    for i in range(self.nStages-1):
+      img_d.append(self.R(img_d[i],self.resamplingFactor))
+    for i in reversed(range(self.nStages)):
+      self.correl[i].getDisplacementField(img_d[i])
+      self.correl[i].showDisplacement()
 
 
 
@@ -349,8 +383,8 @@ class Resize:
   {
     int idx = threadIdx.x+blockIdx.x*blockDim.x;
     int idy = threadIdx.y+blockIdx.y*blockDim.y;
-
-    out[idx+w*idy] = tex2D(tex,(float)idx/w,(float)idy/h);
+    if(idx < w && idy < h)
+      out[idx+w*idy] = tex2D(tex,(float)idx/w,(float)idy/h);
   }
     """)
     self.devResize = mod.get_function("resize")
@@ -360,17 +394,20 @@ class Resize:
     self.tex.set_address_mode(0,cuda.address_mode.CLAMP)
     self.tex.set_address_mode(1,cuda.address_mode.CLAMP)
 
-  def resize(self,img):
+  def resize(self,img,factor=2):
     """
     Simply takes a numpy array of an image (of type np.float32) and returns an image with half the size (new_x = floor(x/2), idem for y)
     """
     devImg = gpuarray.to_gpu(img)
-    w,h = img.shape[0]//2,img.shape[1]//2
     array = cuda.matrix_to_array(img,"C")
     self.tex.set_array(array)
+    w,h = int(round(img.shape[0]/factor)),int(round(img.shape[1]/factor))
 
     devOut = gpuarray.GPUArray((w,h),np.float32)
     grid = ((w+31)//32,(h+31)//32)
     block = (min(w,32),min(h,32),1)
     self.devResize(devOut.gpudata,np.uint32(h),np.uint32(w),grid=grid,block=block)
     return devOut.get()
+
+  def __call__(self,img,factor=2):
+    return self.resize(img,factor)
