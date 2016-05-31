@@ -6,6 +6,7 @@ from pycuda.compiler import SourceModule
 import pycuda.gpuarray as gpuarray
 from pycuda.reduction import ReductionKernel
 from scipy import signal
+from math import ceil,floor
 
 import pycuda.autoinit
 
@@ -357,12 +358,54 @@ class PyramidalCorrel:
         print("Parameters for stage {}".format(i),self.p[i])
 
   def compute(self, img_d):
+    field = np.zeros(self.p[-1].gridShape+(2,))
     img_d = [img_d]
     for i in range(self.nStages-1):
       img_d.append(self.R(img_d[i],self.resamplingFactor))
     for i in reversed(range(self.nStages)):
-      self.correl[i].getDisplacementField(img_d[i])
+      self.correl[i].setOriginalDisplacement(self.resamplingFactor*resample(field,*self.p[i].gridShape))
+      field = self.correl[i].getDisplacementField(img_d[i])
       self.correl[i].showDisplacement()
+
+def mean2D(array,rx,ry):
+  """
+  To return the mean of a non integer slice on a 2D array (to be given as tuples)
+  """
+  irx=(floor(rx[0]),ceil(rx[1]))
+  iry=(floor(ry[0]),ceil(ry[1]))
+  val = array[irx[0]:irx[1],iry[0]:iry[1]]
+  weight = np.ones_like(val,dtype=np.float32)
+  decRx = rx[0]-int(rx[0]),rx[1]-int(rx[1])
+  decRy = ry[0]-int(ry[0]),ry[1]-int(ry[1])
+  
+  if decRx[0]:
+    weight[0,:]*=(1-decRx[0])
+  if decRy[0]:
+    weight[:,0]*=(1-decRy[0])
+  if decRx[1]:
+    weight[-1,:]*=decRx[1]
+  if decRy[1]:
+    weight[:,-1]*=decRy[1]
+  return np.average(val,weights=weight)
+
+
+
+def resample(array,x,y):
+  """
+  To resample a 2D array to a new size, taking the average of surrounding values.
+  (It perserves the mean of the array)
+  """
+  Xarray = array[:,:,0]
+  Yarray = array[:,:,1]
+  oldX,oldY,a = array.shape
+  out = np.zeros((x,y,2))
+  for i in range(x):
+    for j in range(y):
+      out[i,j,0] = mean2D(Xarray,(i/x*oldX,(i+1)/x*oldX),(j/y*oldY,(j+1)/y*oldY))
+      out[i,j,1] = mean2D(Yarray,(i/x*oldX,(i+1)/x*oldX),(j/y*oldY,(j+1)/y*oldY))
+  return out
+  
+
 
 
 
