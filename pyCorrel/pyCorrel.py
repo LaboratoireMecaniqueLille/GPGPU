@@ -58,6 +58,7 @@ class gridCorrel:
     bor = (1-cen)/8.
     self.filterMatrix=np.array([[bor,bor,bor],[bor,cen,bor],[bor,bor,bor]])
     self.customFilter = kwargs.get('filter',False)
+    self.converged = -np.ones((self.numTilesX,self.numTilesY),dtype=int)
 
     debug(3,"Dimensions:",self.w,self.h)
     debug(3,"Grid:",self.grid)
@@ -281,7 +282,7 @@ class gridCorrel:
     import matplotlib.patches as patches
     norm = kwargs.get('norm',10)
     scale = kwargs.get('scale',min(self.w,self.h)/400.)
-    border=kwargs.get('border',False)
+    border=kwargs.get('border',True)
     plt.imshow(self.orig,cmap = plt.get_cmap('gray'), vmin = 0, vmax = 255)
     ax=plt.axes()
     if border:
@@ -293,16 +294,19 @@ class gridCorrel:
 
     for i in rangeX:
       for j in rangeY:
-        if self.converged[i,j]>=0:
+        if self.res[i,j] < self.maxRes:
+          color='yellow'
+        elif self.converged[i,j]>=0:
           color='red'
-        elif self.res[i,j] < self.maxRes:
-          color='orange'
         else:
-          color='blue'
-        ax.arrow((i+.5)/self.numTilesX*self.w, (j+.5)/self.numTilesX*self.h, self.dispField[i,j,0]*norm, self.dispField[i,j,1]*norm, width = scale, head_width=4*scale, head_length=8*scale, fc=color, ec=color)
-    ax.add_patch(patches.Rectangle((1.5*self.w/self.numTilesX,.5*self.w/self.numTilesY),self.t_w,self.t_h,fill=False,color='green',linewidth=3))
-    ax.add_patch(patches.Rectangle((.5*self.w/self.numTilesX,1.5*self.w/self.numTilesY),self.t_w,self.t_h,fill=False,color='green',linewidth=3))
-    ax.add_patch(patches.Rectangle((.5*self.w/self.numTilesX,.5*self.w/self.numTilesY),self.t_w,self.t_h,fill=False,color='yellow',linewidth=2))
+          color='orange'
+        ax.arrow(i/self.numTilesX*self.w+self.t_w/2, j/self.numTilesX*self.h+self.t_h/2, self.dispField[i,j,0]*norm, self.dispField[i,j,1]*norm, width = scale, head_width=4*scale, head_length=8*scale, fc=color, ec=color)
+
+    ax.add_patch(patches.Rectangle((0,self.h/self.numTilesY),self.t_w,self.t_h,fill=False,color='green',linewidth=3))
+    ax.add_patch(patches.Rectangle((self.w/self.numTilesX,0),self.t_w,self.t_h,fill=False,color='green',linewidth=3))
+    ax.add_patch(patches.Rectangle((0,0),self.t_w,self.t_h,fill=False,color='yellow',linewidth=2))
+    #ax.add_patch(patches.Rectangle((self.w-self.t_w,self.h-self.t_h),self.t_w,self.t_h,fill=False,color='orange',linewidth=2))
+    ax.add_patch(patches.Rectangle(((self.numTilesX-1)/self.numTilesX*self.w,(self.numTilesY-1)/self.numTilesY*self.h),self.t_w,self.t_h,fill=False,color='orange',linewidth=2))
     plt.show()
 
 
@@ -322,13 +326,14 @@ class PyramidalCorrel:
     self.verbose = kwargs.get("verbose",0)
     self.R = Resize()
     self.nStages = numOfStages
-    self.resamplingFactor=kwargs.get("factor",2) # The size factor between each stage of the pyramid
+    self.resamplingFactor=kwargs.get("factor",2) # The scale factor between each stage of the pyramid
+    self.overlap = kwargs.get("overlap",1) # Tiles overlaping factor. 1 means tiles border are touching, 2 means tiles twice as big as overlap=1 (-> 4 times the surface)
     self.p = [CorrelParam() for i in range(self.nStages)]
     self.p[0].shape = image.shape
     self.p[0].gridShape = gridShape
+    self.p[0].t_w,self.p[0].t_h = self.overlap*self.p[0].shape[0]/self.p[0].gridShape[0],self.overlap*self.p[0].shape[1]/self.p[0].gridShape[1]
     
 
-    self.overlap = kwargs.get("overlap",1) # Tiles overlaping factor. 1 means tiles border are touching, 2 means tiles twice as big as overlap=1 (-> 4 times the surface)
     self.p[0].maxRes = kwargs.get('maxRes',800)
 
     self.img = [image]
@@ -344,16 +349,16 @@ class PyramidalCorrel:
 
   def prepareParameters(self):
     for i in range(self.nStages):
-      if i != 0:
-        self.p[i].gridShape = int(round(self.p[0].gridShape[0]/self.resamplingFactor**i)),\
-        int(round(self.p[0].gridShape[1]/self.resamplingFactor**i))
-
-        self.p[i].maxRes = self.p[i-1].maxRes/(1+self.resamplingFactor)*2 # Completely empirical (to confirm)
-
-      self.p[i].t_w = self.overlap*self.p[i].shape[0]/self.p[i].gridShape[0]
-      self.p[i].t_h = self.overlap*self.p[i].shape[1]/self.p[i].gridShape[1]
+      self.p[i].t_w = self.p[0].t_w
+      self.p[i].t_h = self.p[0].t_h
       self.p[i].it_w = int(round(self.p[i].t_w))
       self.p[i].it_h = int(round(self.p[i].t_h))
+      if i != 0:
+        #self.p[i].gridShape = int(round((self.p[i].shape[0]-self.p[i].t_w/2)/self.p[i].t_w*self.overlap)),\
+        #int(round((self.p[i].shape[1]-self.p[i].t_h/2)/self.p[i].t_h*self.overlap))
+        self.p[i].gridShape = int(round(self.p[i].shape[0]/self.p[i].t_w*self.overlap)),\
+        int(round(self.p[i].shape[1]/self.p[i].t_h*self.overlap))
+        self.p[i].maxRes = self.p[i-1].maxRes/(1+self.resamplingFactor)*2 # Completely empirical (to confirm)
       if self.verbose:
         print("Parameters for stage {}".format(i),self.p[i])
 
@@ -365,7 +370,9 @@ class PyramidalCorrel:
     for i in reversed(range(self.nStages)):
       self.correl[i].setOriginalDisplacement(self.resamplingFactor*resample(field,*self.p[i].gridShape))
       field = self.correl[i].getDisplacementField(img_d[i])
-      self.correl[i].showDisplacement()
+
+  def show(self,stage=0):
+        self.correl[stage].showDisplacement()
 
 def mean2D(array,rx,ry):
   """
@@ -405,11 +412,6 @@ def resample(array,x,y):
       out[i,j,1] = mean2D(Yarray,(i/x*oldX,(i+1)/x*oldX),(j/y*oldY,(j+1)/y*oldY))
   return out
   
-
-
-
-
-
 class Resize:
   """
   Class meant to resize 2D images using linear interpolation, accelerated by GPU
