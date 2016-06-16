@@ -252,7 +252,7 @@ class CorrelStage:
     The method that actually computes the weight of the fields.
     """
     self.debug(3,"Calling main routine")
-    self.mul = 3
+    self.mul = 3 # This parameter is ESSENTIAL. It defines how "fast" we move towards the solution. High value => Fast convergence but risk to go past the solution and diverge (the program does not try to handle this: if the residual rises, itertions stop immediatly). Low value => Probably more precise but slower and may require more iterations. After multiple tests, 3 was found to be a pretty acceptable value. Don't hesitate to adapt it to your case: use verbose=3 and see if the convergence is too slow or too fast.
     if not self.__ready:
       self.debug(2,"Wasn't ready ! Preparing...")
       self.prepare()
@@ -473,10 +473,20 @@ If it is not desired, consider lowering the verbosity: \
       disp *= self.resamplingFactor
       self.correl[i].setDisp(disp)
       disp = self.correl[i].getDisp()
+    return disp
+
+  def getRes(self,lvl=0):
+    """
+    Returns the last residual of the sepcified level (0 by default)
+    Usually, the correlation is correct when res < ~1e9-10 but it really depends on the images: you need to find the value that suit your own images, depending on the resolution, contrast, correlation method etc... You can use writeDiffFile to visualize the difference between the two images after correlation.
+    """
 
 
-  def writeDiffFile(self):
-    self.correl[0].writeDiffFile()
+  def writeDiffFile(self,level=0):
+    """
+    To see the difference between the two images with the computed parameters. It writes a single channel picture named "diff.png" where 128 gray is exact equality, lighter pixels show positive difference and darker pixels a negative difference. Useful to see if correlation succeded and to identify the origin of non convergence
+    """
+    self.correl[level].writeDiffFile()
 
 
 if __name__ == "__main__":
@@ -484,13 +494,13 @@ if __name__ == "__main__":
   import cv2
   from time import sleep,time
 
-  addr = "../Images/lena.png"
+  addr = "../Images/ref2.png"
   img = cv2.imread(addr,0)
   if img is None:
     raise IOError("Failed to open "+addr)
   img = img.astype(np.float32)
   x,y = img.shape
-  addr_d = "../Images/lena_gm.png"
+  addr_d = "../Images/ref2_grm.png"
   img_d = cv2.imread(addr_d,0)
   if img_d is None:
     raise IOError("Failed to open "+addr_d)
@@ -511,13 +521,14 @@ if __name__ == "__main__":
   Zoom = (Zoom[0].astype(np.float32),Zoom[1].astype(np.float32))
   Rot = (Zoom[1],-Zoom[0])
 
-  c = Correl((2048,2048),img=img,fields=(mvX,mvY,Rot),verbose=1,iterations=6,levels=7)
+  c = Correl((2048,2048),img=img,fields=(mvX,mvY,Rot,Zoom),verbose=3,iterations=6,levels=5)
   c.prepare()
 
+  n = 200
   t1 = time()
-  for i in range(50):
+  print(c.getDisp(img_d))
+  for i in range(n):
     c.getDisp(img_d)
   t2 = time()
   print("Elapsed:",1000*(t2-t1),"ms.")
-  print(20*(t2-t1),"ms/iteration.")
-  c.writeDiffFile()
+  print(1000/n*(t2-t1),"ms/iteration.")
